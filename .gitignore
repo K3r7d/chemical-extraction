@@ -1,0 +1,35 @@
+# --- Project data (kept out of git; downloaded via scripts/download_data.sh) ---
+data/
+outputs/
+
+# --- Secrets ---
+.env
+.env.local
+*.key
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Notebooks ---
+.ipynb_checkpoints/
+
+# --- IDE / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# --- Docker ---
+*.pid
+
+# --- Logs ---
+*.log
