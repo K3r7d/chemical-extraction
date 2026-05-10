@@ -1,0 +1,57 @@
+[project]
+name = "a2i2-extraction"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.136.1",
+    "httpx>=0.28.1",
+    "jsonschema>=4.26.0",
+    "mineru[pipeline]>=3.1.6",
+    "pillow>=10.0.0",
+    "transformers>=4.49.0",
+    "pydantic>=2.13.3",
+    "pydantic-settings>=2.14.0",
+    "rdkit>=2026.3.1",
+    "structlog>=25.5.0",
+    "uvicorn>=0.46.0",
+]
+
+[dependency-groups]
+dev = [
+    "gdown>=6.0.0",
+    "pytest>=9.0.3",
+    "pytest-asyncio>=1.3.0",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.15.12",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/a2i2_extraction"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers -m 'not docker and not gpu and not slow'"
+markers = [
+    "unit: pure-Python tests, no I/O, no network. Always run.",
+    "integration: tests using mocked external services. Always run.",
+    "docker: requires a running Docker daemon. Skipped without it.",
+    "gpu: requires a GPU + downloaded models. Cluster only.",
+    "slow: tests that take >1s. Skipped by default.",
+]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF"]
+ignore = ["E501"]  # line length handled by formatter
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["B011", "RUF001"]  # allow assert False; allow Unicode chemistry chars in test strings
+"src/a2i2_extraction/preprocessing/**" = ["RUF001"]  # μ, α, ı etc. are intentional
