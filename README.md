@@ -4,17 +4,7 @@ PDF → structured synthesis JSON for a heterogeneous medicinal chemistry corpus
 
 ## Architecture
 
-```
-PDF
- └─ [1] MinerU 3        → markdown + figure images
- └─ [2] SigLIP 2        → triage: keep reaction_scheme / single_structure / structure_panel
- └─ [3a] MolNexTR       → OCSR: single-molecule images → SMILES + formula + InChIKey
- └─ [3b] TinyChemVL     → panel/scheme images → {compound_id, SMILES}
- └─ [4] intermediate    → merge vision outputs into structured JSON context
- └─ [5] Qwen vLLM       → synthesis JSON extraction (v3.4 schema, ≤2 retries on violation)
- └─ [6] symbolic verifier → formula/mass/yield checks; retry prompt on failure
- └─ extraction.json + audit.json
-```
+![Pipeline architecture](asset/Screenshot%20from%202026-05-11%2010-41-43.png)
 
 Five Docker services: `mineru` (8000) · `vision` (8001) · `chemvlm` (8002) · `llm` (8000/v1) · `orchestrator` (8080).
 
