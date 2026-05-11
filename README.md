@@ -1,6 +1,6 @@
-# a2i2-extraction
+# chemical-extraction
 
-PDF → structured synthesis JSON for a heterogeneous medicinal chemistry corpus. Extracts compounds, synthesis pathways, reaction conditions, and characterisation data from journal papers and their supporting information.
+PDF to JSON extraction. Extracts compounds, synthesis pathways, reaction conditions, and characterisation data from journal papers and their supporting information.
 
 ## Architecture
 
