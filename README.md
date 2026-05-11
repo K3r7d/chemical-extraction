@@ -4,7 +4,7 @@ PDF → structured synthesis JSON for a heterogeneous medicinal chemistry corpus
 
 ## Architecture
 
-![Pipeline architecture](asset/Screenshot%20from%202026-05-11%2010-41-43.png)
+<img src="asset/architecture.png" width="480" alt="Pipeline architecture">
 
 Five Docker services: `mineru` (8000) · `vision` (8001) · `chemvlm` (8002) · `llm` (8000/v1) · `orchestrator` (8080).
 
