@@ -4,6 +4,20 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+# Preflight: verify Docker is accessible.
+if ! docker info >/dev/null 2>&1; then
+    echo "ERROR: Cannot connect to Docker daemon." >&2
+    echo "  The deploy user must be in the 'docker' group before running this script." >&2
+    echo "  On a new node, run this ONCE as an admin during provisioning:" >&2
+    echo "    sudo usermod -aG docker <deploy-user>" >&2
+    echo "  Then start a new session for the change to take effect." >&2
+    exit 1
+fi
+
+echo "=== Downloading paper corpus (skips if already present) ==="
+bash "$(dirname "$0")/download_data.sh"
+
+echo ""
 echo "=== Building and starting all services ==="
 docker compose up -d --build
 
