@@ -32,37 +32,22 @@ Five Docker services: `mineru` (8000) · `vision` (8001) · `chemvlm` (8002) · 
 ## Deploy
 
 ```bash
-# 1. Configure
-cp .env.example .env
-# Edit .env: set HUGGING_FACE_HUB_TOKEN and GPU assignments
+git clone <repo> && cd a2i2-extraction
 
-# 2. Download paper data
-make data        # downloads corpus; or place PDFs in data/papers/<n>/<file>.pdf
-
-# 3. Start all services (models auto-download on first run)
-docker compose up -d
-
-# 4. Wait for the LLM to load (large model; takes several minutes on first start)
-docker compose logs -f llm
-
-# 5. Verify all services are healthy
-curl http://localhost:8080/health
+bash scripts/deploy.sh
 ```
 
-Expected health response when ready:
-```json
-{"status":"ok","mineru":true,"llm":true,"vision":true,"chemvlm":true}
-```
+Paper data is downloaded automatically on first run (from Google Drive). Subsequent starts skip the download.
 
-### Extract a paper
+### Extract papers
 
 ```bash
-curl -X POST http://localhost:8080/extract \
-  -H "Content-Type: application/json" \
-  -d '{"paper_dir": "/data/papers/1"}'
+bash scripts/extract_all.sh          # all papers in data/papers/
+bash scripts/extract_one.sh 1        # single paper by number
+bash scripts/status.sh               # health + results summary
 ```
 
-Output is written to `./outputs/<paper-slug>/extraction.json` and `audit.json`.
+Output written to `./outputs/<paper-slug>/extraction.json` and `audit.json`.
 
 ### GPU assignment
 

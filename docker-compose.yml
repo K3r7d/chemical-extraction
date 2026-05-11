@@ -6,6 +6,13 @@
 x-llm-model: &llm-model Qwen/Qwen3.6-72B-Instruct
 
 services:
+  data-init:
+    image: python:3.12-slim
+    working_dir: /workspace
+    command: bash scripts/download_data.sh
+    volumes:
+      - .:/workspace
+
   orchestrator:
     build:
       context: .
@@ -24,6 +31,8 @@ services:
       - ./data:/data:ro
       - ./outputs:/outputs
     depends_on:
+      data-init:
+        condition: service_completed_successfully
       mineru:
         condition: service_healthy
       vision:
