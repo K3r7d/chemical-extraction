@@ -16,7 +16,7 @@ class Settings(BaseSettings):
         "http://llm:8000/v1", description="vLLM OpenAI-compatible base URL"
     )
     llm_model_name: str = Field(
-        "Qwen/Qwen3.6-72B-Instruct",
+        "Qwen/Qwen3.6-35B-A3B",
         description="HF id of the model vLLM is serving",
     )
     llm_api_key: str = Field("EMPTY", description="vLLM doesn't enforce auth by default")

@@ -3,7 +3,7 @@
 # To change the LLM model, edit LLM_MODEL here (two places: orchestrator + llm).
 # One-touch start: docker compose up -d
 
-x-llm-model: &llm-model Qwen/Qwen3.6-72B-Instruct
+x-llm-model: &llm-model Qwen/Qwen3.6-35B-A3B
 
 services:
   data-init:
