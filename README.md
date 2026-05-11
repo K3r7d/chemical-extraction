@@ -22,7 +22,7 @@ Five Docker services: `mineru` (8000) · `vision` (8001) · `chemvlm` (8002) · 
 ## Deploy
 
 ```bash
-git clone <repo> && cd a2i2-extraction
+git clone https://github.com/K3r7d/chemical-extraction.git && cd chemical-extraction
 
 bash scripts/deploy.sh
 ```
