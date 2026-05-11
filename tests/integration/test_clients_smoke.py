@@ -23,7 +23,7 @@ pytestmark = pytest.mark.docker  # NOT also `integration` — those run without 
 
 MINERU_URL = os.environ.get("MINERU_URL", "http://localhost:8001")
 LLM_URL = os.environ.get("LLM_URL", "http://localhost:8000/v1")
-LLM_MODEL = os.environ.get("LLM_MODEL_NAME", "Qwen/Qwen3.6-72B-Instruct")
+LLM_MODEL = os.environ.get("LLM_MODEL_NAME", "Qwen/Qwen3.5-9B")
 
 
 async def test_mineru_health() -> None:

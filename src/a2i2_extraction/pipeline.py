@@ -25,9 +25,6 @@ if TYPE_CHECKING:
 
 log = structlog.get_logger(__name__)
 
-_MAX_RETRIES = 2
-
-
 @dataclass
 class ExtractionResult:
     paper_dir: Path
@@ -48,6 +45,7 @@ class Pipeline:
         llm: LLMClient,
         model_name: str,
         output_dir: Path,
+        max_retries: int = 2,
         vision: VisionClient | None = None,
         chemvlm: ChemVLMHTTPClient | None = None,
     ) -> None:
@@ -55,6 +53,7 @@ class Pipeline:
         self._llm = llm
         self._model_name = model_name
         self._output_dir = output_dir
+        self._max_retries = max_retries
         self._vision = vision
         self._chemvlm = chemvlm
 
@@ -120,7 +119,7 @@ class Pipeline:
         extraction: dict = {}
         issues: list[Issue] = []
 
-        for attempt in range(_MAX_RETRIES + 1):
+        for attempt in range(self._max_retries + 1):
             current_prompt = prompt if attempt == 0 else _retry_prompt(prompt, raw, issues)
             try:
                 raw = await self._llm.complete(current_prompt)
@@ -133,7 +132,7 @@ class Pipeline:
                     path="$",
                 )]
                 log.warning("pipeline.llm_json_error", attempt=attempt, error=str(exc))
-                if attempt < _MAX_RETRIES:
+                if attempt < self._max_retries:
                     continue
                 return extraction, issues, attempt
 
@@ -141,10 +140,10 @@ class Pipeline:
             errors = [i for i in issues if i.severity is Severity.ERROR]
             if not errors:
                 return extraction, issues, attempt
-            if attempt < _MAX_RETRIES:
+            if attempt < self._max_retries:
                 log.info("pipeline.retry", attempt=attempt + 1, violations=len(errors))
 
-        return extraction, issues, _MAX_RETRIES
+        return extraction, issues, self._max_retries
 
     async def _run_vision(self, doc: ParsedDocument, markdown_text: str):
         """Stages 2–4: triage → OCSR → ChemVLM → intermediate.

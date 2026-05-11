@@ -1,0 +1,27 @@
+# a2i2-extraction runtime configuration.
+# This is the single source of truth for all tuneable parameters.
+# Override any key via environment variable or .env (env vars take priority).
+
+# ── Service URLs ──────────────────────────────────────────────────────────────
+mineru_url: http://mineru:8000
+vision_url: http://vision:8001
+chemvlm_url: http://chemvlm:8002
+llm_url: http://llm:8000/v1
+
+# ── LLM ──────────────────────────────────────────────────────────────────────
+llm_model_name: Qwen/Qwen3.5-9B
+llm_api_key: EMPTY
+llm_max_tokens: 32000        # max output tokens the LLM may generate
+llm_temperature: 0.0
+llm_request_timeout_s: 600.0
+llm_max_model_len: 65536     # vLLM --max-model-len (input + output context window)
+llm_dtype: auto              # vLLM --dtype (auto, bfloat16, float16)
+
+# ── Service timeouts (seconds) ───────────────────────────────────────────────
+mineru_timeout_s: 600.0
+vision_timeout_s: 120.0
+chemvlm_timeout_s: 300.0
+
+# ── Pipeline ──────────────────────────────────────────────────────────────────
+pipeline_max_retries: 2
+output_dir: outputs

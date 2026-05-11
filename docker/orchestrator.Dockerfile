@@ -18,8 +18,9 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-install-project --no-dev
 
-# Then code.
+# Then code and config.
 COPY src ./src
+COPY configs ./configs
 RUN uv sync --frozen --no-dev
 
 EXPOSE 8080

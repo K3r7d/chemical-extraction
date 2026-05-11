@@ -32,7 +32,7 @@ class ExtractResponse(BaseModel):
 def _build_pipeline() -> Pipeline:
     s = get_settings()
     return Pipeline(
-        mineru=MinerUHTTPClient(s.mineru_url, timeout_s=s.llm_request_timeout_s),
+        mineru=MinerUHTTPClient(s.mineru_url, timeout_s=s.mineru_timeout_s),
         llm=VLLMClient(
             s.llm_url,
             model_name=s.llm_model_name,
@@ -43,8 +43,9 @@ def _build_pipeline() -> Pipeline:
         ),
         model_name=s.llm_model_name,
         output_dir=Path(s.output_dir),
-        vision=VisionClient(s.vision_url),
-        chemvlm=ChemVLMHTTPClient(s.chemvlm_url),
+        max_retries=s.pipeline_max_retries,
+        vision=VisionClient(s.vision_url, timeout_s=s.vision_timeout_s),
+        chemvlm=ChemVLMHTTPClient(s.chemvlm_url, timeout_s=s.chemvlm_timeout_s),
     )
 
 
