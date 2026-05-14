@@ -127,17 +127,37 @@ echo $! > /tmp/a2i2-orchestrator.pid
 
 echo ""
 echo "=== Waiting for stack to be ready ==="
-echo "  (LLM model load can take several minutes on first run)"
-echo "  Logs: logs/{llm,mineru,vision,chemvlm,orchestrator}.log"
-echo "  Following orchestrator health..."
+echo "  LLM model load can take 10-20 min on first run (downloading weights)."
+echo "  Live log tail below — Ctrl+C is safe, services keep running in background."
+echo ""
 
-until curl -sf http://localhost:8080/health | python3 -c "
+_tail_log() {
+    local label="$1" file="$2"
+    local line
+    line=$(tail -1 "$file" 2>/dev/null | tr -d '\r' | sed 's/^[[:space:]]*//')
+    [ -n "$line" ] && printf "  [%-12s] %s\n" "$label" "${line:0:100}"
+}
+
+_check_health() {
+    curl -sf http://localhost:8080/health 2>/dev/null | python3 -c "
 import json, sys
 d = json.load(sys.stdin)
-ok = all(d.get(k) for k in ['mineru', 'llm', 'vision', 'chemvlm'])
-print('  ' + ('✓ All services healthy' if ok else '✗ ' + str(d)))
-sys.exit(0 if ok else 1)
-" 2>/dev/null; do
+parts = []
+for k in ['mineru', 'llm', 'vision', 'chemvlm']:
+    parts.append(('✓' if d.get(k) else '✗') + k)
+print('  health: ' + '  '.join(parts))
+sys.exit(0 if all(d.get(k) for k in ['mineru','llm','vision','chemvlm']) else 1)
+" 2>/dev/null
+}
+
+until _check_health; do
+    echo "-- $(date '+%H:%M:%S') --"
+    _tail_log "llm"        logs/llm.log
+    _tail_log "mineru"     logs/mineru.log
+    _tail_log "vision"     logs/vision.log
+    _tail_log "chemvlm"    logs/chemvlm.log
+    _tail_log "orchestrat" logs/orchestrator.log
+    echo ""
     sleep 15
 done
 
