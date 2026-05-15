@@ -34,15 +34,20 @@ Paper data is downloaded automatically on first run. Subsequent starts skip the 
 
 ### Local mode (no Docker)
 
-Use this when Docker is unavailable (e.g. vast.ai, WSL, unprivileged containers).
+Use this when Docker is unavailable (e.g. Vast.ai, WSL, unprivileged containers).
 
 ```bash
 git clone https://github.com/K3r7d/chemical-extraction.git && cd chemical-extraction
-uv sync
+
+# First-time setup: installs vllm, MolNexTR, ChemVLM deps, and downloads model weights.
+# Safe to re-run — downloads are skipped if already cached.
+bash scripts/setup_local.sh
 
 bash scripts/deploy.sh --local
 # or: make deploy-local
 ```
+
+On Vast.ai PyTorch templates `setup_local.sh` reuses the pre-installed torch automatically (no re-download). On a plain machine it installs torch from scratch.
 
 Services start as background processes on localhost. Logs are written to `logs/`.
 
@@ -71,13 +76,17 @@ Output written to `./outputs/<paper-slug>/extraction.json` and `audit.json`.
 
 ### Port assignments
 
-| Service | Docker | Local |
+Host-facing ports (what you connect to from outside):
+
+| Service | Docker (host) | Local |
 |---|---|---|
-| LLM (vLLM) | 8000 | 8000 |
-| MinerU | 8000 (internal) | 8010 |
-| Vision | 8001 | 8001 |
-| ChemVLM | 8002 | 8002 |
-| Orchestrator | 8080 | 8080 |
+| LLM (vLLM) | 28000 | 28000 |
+| MinerU | — (internal only) | 28010 |
+| Vision | 28001 | 28001 |
+| ChemVLM | 28002 | 28002 |
+| Orchestrator | 28080 | 28080 |
+
+Docker inter-service communication uses the container names on the internal bridge network (e.g. `http://mineru:8000`) — those internal ports are unchanged.
 
 ### GPU assignment
 
@@ -90,10 +99,9 @@ MinerU, Vision (SigLIP 2 + MolNexTR), and ChemVLM (TinyChemVL) are lightweight a
 ### Setup
 
 ```bash
-uv sync          # install Python deps into .venv
-make data        # download paper corpus
-make models      # download MinerU pipeline weights (~1.2 GB, one-time)
-make test        # 100 unit + integration tests (no GPU, no network)
+bash scripts/setup_local.sh   # install all deps + download model weights (one-time)
+make data                      # download paper corpus
+make test                      # 100 unit + integration tests (no GPU, no network)
 ```
 
 ### Running a subset of services (Docker)
