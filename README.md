@@ -4,9 +4,13 @@ PDF to JSON extraction. Extracts compounds, synthesis pathways, reaction conditi
 
 ## Architecture
 
-<img src="asset/architecture.png" width="480" alt="Pipeline architecture">
+Three services: `mineru` · `llm` · `orchestrator`.
 
-Five services: `mineru` · `vision` · `chemvlm` · `llm` · `orchestrator`. Can run via Docker Compose or directly as local processes.
+```
+PDF → MinerU (markdown + figures) → Qwen3.5-9B vision LLM → synthesis JSON → validator
+```
+
+Can run via Docker Compose or directly as local processes.
 
 ---
 
@@ -14,7 +18,6 @@ Five services: `mineru` · `vision` · `chemvlm` · `llm` · `orchestrator`. Can
 
 - NVIDIA GPU(s) with CUDA 12+
 - `uv` (Python package manager)
-- HuggingFace account with access to Qwen models
 - **Docker mode only:** Docker ≥ 24 with [nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html)
 
 ---
@@ -27,7 +30,6 @@ Five services: `mineru` · `vision` · `chemvlm` · `llm` · `orchestrator`. Can
 git clone https://github.com/K3r7d/chemical-extraction.git && cd chemical-extraction
 
 bash scripts/deploy.sh
-# or: make deploy
 ```
 
 Paper data is downloaded automatically on first run. Subsequent starts skip the download.
@@ -39,15 +41,14 @@ Use this when Docker is unavailable (e.g. Vast.ai, WSL, unprivileged containers)
 ```bash
 git clone https://github.com/K3r7d/chemical-extraction.git && cd chemical-extraction
 
-# First-time setup: installs vllm, MolNexTR, ChemVLM deps, and downloads model weights.
-# Safe to re-run — downloads are skipped if already cached.
+# First-time setup: creates venv, installs vllm.
+# Safe to re-run — already-done steps are skipped.
 bash scripts/setup_local.sh
 
 bash scripts/deploy.sh --local
-# or: make deploy-local
 ```
 
-On Vast.ai PyTorch templates `setup_local.sh` reuses the pre-installed torch automatically (no re-download). On a plain machine it installs torch from scratch.
+On Vast.ai PyTorch templates, `setup_local.sh` reuses the pre-installed torch automatically (no re-download). On a plain machine it installs torch from scratch.
 
 Services start as background processes on localhost. Logs are written to `logs/`.
 
@@ -55,10 +56,42 @@ To stop all local services:
 
 ```bash
 bash scripts/stop_local.sh
-# or: make stop-local
 ```
 
-### Extract papers
+---
+
+## Watching logs during startup
+
+The LLM model download + load takes 10–20 min on first run. `deploy.sh` tails logs automatically, but you can also watch them directly:
+
+```bash
+# Follow a single service (most useful during startup)
+tail -f logs/llm.log          # LLM — slowest, watch this first
+tail -f logs/mineru.log
+tail -f logs/orchestrator.log
+
+# Follow all at once with labels
+tail -f logs/llm.log logs/mineru.log logs/orchestrator.log
+
+# Check stack health at any time
+bash scripts/status.sh
+```
+
+**What to look for:**
+
+| Service | Ready signal |
+|---|---|
+| LLM | `INFO: Uvicorn running on http://127.0.0.1:28000` |
+| MinerU | `INFO: Uvicorn running on http://127.0.0.1:28010` |
+| Orchestrator | `INFO: Uvicorn running on http://127.0.0.1:28080` |
+
+Once all three are up, `bash scripts/status.sh` will show all green.
+
+> **Ctrl+C is safe** — it exits the log tail but leaves all services running in the background.
+
+---
+
+## Extract papers
 
 ```bash
 # Docker mode
@@ -74,7 +107,9 @@ bash scripts/status.sh                  # health + results summary
 
 Output written to `./outputs/<paper-slug>/extraction.json` and `audit.json`.
 
-### Port assignments
+---
+
+## Port assignments
 
 Host-facing ports (what you connect to from outside):
 
@@ -82,15 +117,13 @@ Host-facing ports (what you connect to from outside):
 |---|---|---|
 | LLM (vLLM) | 28000 | 28000 |
 | MinerU | — (internal only) | 28010 |
-| Vision | 28001 | 28001 |
-| ChemVLM | 28002 | 28002 |
 | Orchestrator | 28080 | 28080 |
 
-Docker inter-service communication uses the container names on the internal bridge network (e.g. `http://mineru:8000`) — those internal ports are unchanged.
+Docker inter-service communication uses container names on the internal bridge network (e.g. `http://mineru:8000`) — those internal ports are unchanged.
 
 ### GPU assignment
 
-MinerU, Vision (SigLIP 2 + MolNexTR), and ChemVLM (TinyChemVL) are lightweight and share a single GPU (default: GPU 0). The LLM service automatically uses all remaining GPUs with tensor-parallel — no configuration needed.
+MinerU is lightweight and runs on GPU 0. The LLM service automatically uses all GPUs with tensor-parallel — no configuration needed.
 
 ---
 
@@ -99,19 +132,19 @@ MinerU, Vision (SigLIP 2 + MolNexTR), and ChemVLM (TinyChemVL) are lightweight a
 ### Setup
 
 ```bash
-bash scripts/setup_local.sh   # install all deps + download model weights (one-time)
+bash scripts/setup_local.sh   # install deps (one-time)
 make data                      # download paper corpus
-make test                      # 100 unit + integration tests (no GPU, no network)
+make test                      # 52 unit + integration tests (no GPU, no network)
 ```
 
 ### Running a subset of services (Docker)
 
 ```bash
 # Start only the services you need
-docker compose up -d mineru vision llm
+docker compose up -d mineru llm
 
 # Override the LLM model without editing the compose file
-LLM_MODEL_NAME=Qwen/Qwen2.5-7B-Instruct \
+LLM_MODEL_NAME=Qwen/Qwen3.5-9B \
 TENSOR_PARALLEL_SIZE=1 \
   docker compose up -d llm
 ```
@@ -121,7 +154,7 @@ TENSOR_PARALLEL_SIZE=1 \
 All settings can be overridden via environment variables:
 
 ```bash
-LLM_MODEL_NAME=Qwen/Qwen2.5-7B-Instruct bash scripts/deploy.sh --local
+LLM_MODEL_NAME=Qwen/Qwen3.5-9B bash scripts/deploy.sh --local
 ```
 
 ---
@@ -140,7 +173,7 @@ outputs/
     extraction.json           # v3.4 schema output
     audit.json                # retries, extraction_status, validation issues
 logs/                         # local mode service logs
-  llm.log  mineru.log  vision.log  chemvlm.log  orchestrator.log
+  llm.log  mineru.log  orchestrator.log
 ```
 
 ### `extraction.json` top-level keys
@@ -149,7 +182,7 @@ logs/                         # local mode service logs
 |---|---|
 | `extraction` | metadata: model, prompt version, date, status |
 | `paper` | bibliographic info |
-| `compounds` | list of compounds with id, name, SMILES, formula, role |
+| `compounds` | list of compounds with id, name, formula, MS data, role |
 | `synthesis` | list of pathways: target, steps, conditions, yields |
 
 ### `audit.json`
@@ -173,7 +206,6 @@ logs/                         # local mode service logs
 ```bash
 make test                  # unit + integration (no GPU, no network required)
 uv run pytest -m docker    # smoke tests against a running Docker stack
-uv run pytest -m slow      # real SigLIP 2 triage on paper 1 (requires MinerU output)
 ```
 
 ---
