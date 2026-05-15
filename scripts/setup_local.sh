@@ -43,7 +43,10 @@ uv pip install "vllm==0.20.2"
 # ── 3. MolNexTR ───────────────────────────────────────────────────────────────
 echo ""
 echo "=== Installing MolNexTR ==="
-uv pip install "git+https://github.com/CYF2000127/MolNexTR"
+# MolNexTR pins pyonmttok==1.37.1 which has no cp312 wheel (only up to cp311).
+# Install without deps first, then pull in a newer pyonmttok that has cp312 wheels.
+uv pip install --no-deps "git+https://github.com/CYF2000127/MolNexTR"
+uv pip install "pyonmttok>=1.37.1" albumentations timm opencv-python-headless
 
 # ── 4. ChemVLM inference deps ─────────────────────────────────────────────────
 echo ""
