@@ -26,7 +26,7 @@ services:
       LLM_MODEL_NAME: *llm-model
       OUTPUT_DIR: /outputs
     ports:
-      - "8080:8080"
+      - "28080:8080"
     volumes:
       - ./data:/data:ro
       - ./outputs:/outputs
@@ -72,7 +72,7 @@ services:
       VISION_OCSR_CHECKPOINT: /cache/molnextr/molnextr_best.pth
       VISION_BATCH_SIZE: "8"
     ports:
-      - "8001:8001"
+      - "28001:8001"
     volumes:
       - ./outputs:/outputs
       - hf-cache:/cache/huggingface
@@ -97,7 +97,7 @@ services:
       CHEMVLM_QUANTIZE: none        # bf16; set to 4bit if VRAM is limited
       CHEMVLM_MAX_NEW_TOKENS: "512"
     ports:
-      - "8002:8002"
+      - "28002:8002"
     volumes:
       - ./outputs:/outputs
       - chemvlm-cache:/cache/chemvlm
@@ -121,7 +121,7 @@ services:
       LLM_DTYPE: auto
       LLM_MAX_MODEL_LEN: "65536"
     ports:
-      - "8000:8000"
+      - "28000:8000"
     volumes:
       - hf-cache:/cache/huggingface
     shm_size: "16gb"

@@ -21,8 +21,8 @@ from a2i2_extraction.clients import MinerUHTTPClient, VLLMClient
 pytestmark = pytest.mark.docker  # NOT also `integration` — those run without services
 
 
-MINERU_URL = os.environ.get("MINERU_URL", "http://localhost:8001")
-LLM_URL = os.environ.get("LLM_URL", "http://localhost:8000/v1")
+MINERU_URL = os.environ.get("MINERU_URL", "http://localhost:28001")
+LLM_URL = os.environ.get("LLM_URL", "http://localhost:28000/v1")
 LLM_MODEL = os.environ.get("LLM_MODEL_NAME", "Qwen/Qwen3.5-9B")
 
 

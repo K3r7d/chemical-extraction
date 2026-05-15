@@ -7,7 +7,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-ORCHESTRATOR="http://localhost:8080"
+ORCHESTRATOR="http://localhost:28080"
 NUM=""
 MODE="docker"
 

@@ -41,7 +41,7 @@ if [ "$MODE" = "docker" ]; then
     echo "  (LLM model download + load can take several minutes on first run)"
     echo "  Following orchestrator health..."
 
-    until curl -sf http://localhost:8080/health | python3 -c "
+    until curl -sf http://localhost:28080/health | python3 -c "
 import json, sys
 d = json.load(sys.stdin)
 ok = all(d.get(k) for k in ['mineru', 'llm', 'vision', 'chemvlm'])
@@ -53,8 +53,8 @@ sys.exit(0 if ok else 1)
 
     echo ""
     echo "=== Stack is ready ==="
-    echo "  Orchestrator : http://localhost:8080"
-    echo "  LLM API      : http://localhost:8000/v1"
+    echo "  Orchestrator : http://localhost:28080"
+    echo "  LLM API      : http://localhost:28000/v1"
     echo ""
     echo "  Run extractions:"
     echo "    bash scripts/extract_all.sh           # all papers"
@@ -83,45 +83,46 @@ for pidfile in /tmp/a2i2-*.pid; do
 done
 
 echo ""
-echo "=== Starting vLLM (port 8000) ==="
+echo "=== Starting vLLM (port 28000) ==="
 uv run python -m vllm.entrypoints.openai.api_server \
     --model "$LLM_MODEL" \
     --tensor-parallel-size "$GPU_COUNT" \
     --dtype auto \
     --max-model-len 65536 \
-    --host 127.0.0.1 --port 8000 \
+    --host 127.0.0.1 --port 28000 \
     > logs/llm.log 2>&1 &
 echo $! > /tmp/a2i2-llm.pid
 
-echo "=== Starting MinerU service (port 8010) ==="
+echo "=== Starting MinerU service (port 28010) ==="
 MINERU_OUTPUT_ROOT=outputs/mineru \
 PYTHONPATH=services/mineru \
-uv run uvicorn server:app --host 127.0.0.1 --port 8010 \
+uv run uvicorn server:app --host 127.0.0.1 --port 28010 \
     > logs/mineru.log 2>&1 &
 echo $! > /tmp/a2i2-mineru.pid
 
-echo "=== Starting vision service (port 8001) ==="
+echo "=== Starting vision service (port 28001) ==="
 PYTHONPATH=src:services/vision \
-uv run uvicorn server:app --host 127.0.0.1 --port 8001 \
+VISION_OCSR_CHECKPOINT="${VISION_OCSR_CHECKPOINT:-${HOME}/.cache/molnextr/molnextr_best.pth}" \
+uv run uvicorn server:app --host 127.0.0.1 --port 28001 \
     > logs/vision.log 2>&1 &
 echo $! > /tmp/a2i2-vision.pid
 
-echo "=== Starting ChemVLM service (port 8002) ==="
+echo "=== Starting ChemVLM service (port 28002) ==="
 CHEMVLM_MODEL_DIR="${CHEMVLM_MODEL_DIR:-${HOME}/.cache/chemvlm/TinyChemVL}" \
 CHEMVLM_MODEL_ID="${CHEMVLM_MODEL_ID:-Noct25/TinyChemVL}" \
 PYTHONPATH=services/chemvlm \
-uv run uvicorn server:app --host 127.0.0.1 --port 8002 \
+uv run uvicorn server:app --host 127.0.0.1 --port 28002 \
     > logs/chemvlm.log 2>&1 &
 echo $! > /tmp/a2i2-chemvlm.pid
 
-echo "=== Starting orchestrator (port 8080) ==="
-MINERU_URL=http://127.0.0.1:8010 \
-LLM_URL=http://127.0.0.1:8000/v1 \
+echo "=== Starting orchestrator (port 28080) ==="
+MINERU_URL=http://127.0.0.1:28010 \
+LLM_URL=http://127.0.0.1:28000/v1 \
 LLM_MODEL_NAME="$LLM_MODEL" \
-VISION_URL=http://127.0.0.1:8001 \
-CHEMVLM_URL=http://127.0.0.1:8002 \
+VISION_URL=http://127.0.0.1:28001 \
+CHEMVLM_URL=http://127.0.0.1:28002 \
 OUTPUT_DIR=outputs \
-uv run uvicorn a2i2_extraction.api:app --host 127.0.0.1 --port 8080 \
+uv run uvicorn a2i2_extraction.api:app --host 127.0.0.1 --port 28080 \
     > logs/orchestrator.log 2>&1 &
 echo $! > /tmp/a2i2-orchestrator.pid
 
@@ -139,7 +140,7 @@ _tail_log() {
 }
 
 _check_health() {
-    curl -sf http://localhost:8080/health 2>/dev/null | python3 -c "
+    curl -sf http://localhost:28080/health 2>/dev/null | python3 -c "
 import json, sys
 d = json.load(sys.stdin)
 parts = []
@@ -163,8 +164,8 @@ done
 
 echo ""
 echo "=== Stack is ready ==="
-echo "  Orchestrator : http://localhost:8080"
-echo "  LLM API      : http://localhost:8000/v1"
+echo "  Orchestrator : http://localhost:28080"
+echo "  LLM API      : http://localhost:28000/v1"
 echo ""
 echo "  Run extractions:"
 echo "    bash scripts/extract_all.sh --local    # all papers"
