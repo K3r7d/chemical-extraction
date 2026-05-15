@@ -23,14 +23,14 @@ echo "=== Setting up Python environment ==="
 # create the venv with system-site-packages so we don't re-download ~3 GB.
 if python3 -c "import torch" 2>/dev/null; then
     echo "  System torch found — creating venv with --system-site-packages"
-    uv venv --system-site-packages
+    [ -d .venv ] || uv venv --system-site-packages
     uv sync \
         --no-install-package torch \
         --no-install-package torchvision \
         --no-install-package torchaudio
 else
     echo "  No system torch — creating isolated venv (torch will be installed)"
-    uv venv
+    [ -d .venv ] || uv venv
     uv sync
 fi
 
@@ -51,9 +51,10 @@ uv pip install "pyonmttok>=1.37.1" albumentations timm opencv-python-headless
 # ── 4. ChemVLM inference deps ─────────────────────────────────────────────────
 echo ""
 echo "=== Installing ChemVLM deps ==="
-# TinyChemVL is an InternVL2.5 checkpoint — modelscope downloads the weights;
-# the other packages are InternVL2.5 inference requirements.
+# hf_transfer: Rust-based parallel downloader — saturates high-bandwidth links.
+# modelscope kept as fallback in case HF is unavailable.
 uv pip install \
+    hf_transfer \
     modelscope \
     "accelerate>=0.30" \
     "bitsandbytes>=0.43" \
@@ -81,13 +82,23 @@ echo "=== Downloading TinyChemVL weights ==="
 if [ -f "${CHEMVLM_MODEL_DIR}/config.json" ]; then
     echo "  Already cached at ${CHEMVLM_MODEL_DIR} — skipping."
 else
-    mkdir -p "$(dirname "$CHEMVLM_MODEL_DIR")"
+    mkdir -p "${CHEMVLM_MODEL_DIR}"
     echo "  Downloading ${CHEMVLM_MODEL_ID} to ${CHEMVLM_MODEL_DIR} (~8 GB)..."
-    uv run python - <<EOF
+    # hf_transfer uses parallel chunked downloads — much faster than ModelScope
+    # on high-bandwidth nodes. Falls back to ModelScope if HF download fails.
+    if HF_HUB_ENABLE_HF_TRANSFER=1 uv run python - <<EOF 2>/dev/null
+from huggingface_hub import snapshot_download
+snapshot_download("${CHEMVLM_MODEL_ID}", local_dir="${CHEMVLM_MODEL_DIR}", local_dir_use_symlinks=False)
+EOF
+        echo "  Done (via HuggingFace)."
+    else
+        echo "  HuggingFace failed, falling back to ModelScope..."
+        uv run python - <<EOF
 from modelscope import snapshot_download
 snapshot_download("${CHEMVLM_MODEL_ID}", local_dir="${CHEMVLM_MODEL_DIR}")
 EOF
-    echo "  Done."
+        echo "  Done (via ModelScope)."
+    fi
 fi
 
 # ── Done ──────────────────────────────────────────────────────────────────────
