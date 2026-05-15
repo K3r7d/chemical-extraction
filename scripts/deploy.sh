@@ -94,7 +94,10 @@ uv run python -m vllm.entrypoints.openai.api_server \
 echo $! > /tmp/a2i2-llm.pid
 
 echo "=== Starting MinerU service (port 28010) ==="
+# CPU by default: vLLM fully occupies the GPU(s) in local mode, so MinerU
+# would CUDA-OOM. Override with MINERU_DEVICE_MODE=cuda if there's headroom.
 MINERU_OUTPUT_ROOT=outputs/mineru \
+MINERU_DEVICE_MODE="${MINERU_DEVICE_MODE:-cpu}" \
 PYTHONPATH=services/mineru \
 uv run uvicorn server:app --host 127.0.0.1 --port 28010 \
     > logs/mineru.log 2>&1 &
