@@ -79,7 +79,7 @@ fi
 # ── 6. TinyChemVL weights ─────────────────────────────────────────────────────
 echo ""
 echo "=== Downloading TinyChemVL weights ==="
-if [ -f "${CHEMVLM_MODEL_DIR}/config.json" ]; then
+if ls "${CHEMVLM_MODEL_DIR}"/*.safetensors 2>/dev/null | grep -q .; then
     echo "  Already cached at ${CHEMVLM_MODEL_DIR} — skipping."
 else
     mkdir -p "${CHEMVLM_MODEL_DIR}"
