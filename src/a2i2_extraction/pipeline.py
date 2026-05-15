@@ -16,6 +16,8 @@ from .validators import Issue, Severity, validate_extraction
 
 log = structlog.get_logger(__name__)
 
+_IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
+
 
 @dataclass
 class ExtractionResult:
@@ -61,13 +63,18 @@ class Pipeline:
         if si_doc and si_text:
             self._save_cleaned(si_doc, si_text)
 
+        images = _collect_images(main_doc, si_doc)
+        log.info("pipeline.images", count=len(images))
+
         prompt = build_extraction_prompt(
             paper_text=main_text,
             si_text=si_text,
         )
-        log.info("pipeline.llm_call", prompt_chars=len(prompt))
+        log.info("pipeline.llm_call", prompt_chars=len(prompt), images=len(images))
 
-        extraction, issues, retries = await self._extract_with_retry(prompt)
+        extraction, issues, retries = await self._extract_with_retry(
+            prompt, images=images
+        )
 
         extraction.setdefault("extraction", {})
         extraction["extraction"].setdefault("prompt_version", "v3.4")
@@ -92,7 +99,7 @@ class Pipeline:
         return result
 
     async def _extract_with_retry(
-        self, prompt: str
+        self, prompt: str, *, images: list[Path] | None = None
     ) -> tuple[dict, list[Issue], int]:
         raw = ""
         extraction: dict = {}
@@ -101,7 +108,10 @@ class Pipeline:
         for attempt in range(self._max_retries + 1):
             current_prompt = prompt if attempt == 0 else _retry_prompt(prompt, raw, issues)
             try:
-                raw = await self._llm.complete(current_prompt)
+                # Images only on first attempt — retry prompts are text-only to
+                # avoid re-sending large payloads when fixing validation issues.
+                attempt_images = images if attempt == 0 else None
+                raw = await self._llm.complete(current_prompt, images=attempt_images)
                 extraction = _parse_llm_json(raw)
             except Exception as exc:
                 issues = [Issue(
@@ -165,6 +175,21 @@ class Pipeline:
                 indent=2,
             )
         )
+
+
+def _collect_images(*docs: ParsedDocument | None) -> list[Path]:
+    """Collect all figure images from MinerU output directories."""
+    images: list[Path] = []
+    for doc in docs:
+        if doc is None or doc.output_dir is None:
+            continue
+        img_dir = doc.output_dir / "images"
+        if img_dir.is_dir():
+            images.extend(sorted(
+                p for p in img_dir.iterdir()
+                if p.suffix.lower() in _IMAGE_SUFFIXES
+            ))
+    return images
 
 
 def _resolve_paper_files(paper_dir: Path) -> tuple[Path, Path | None]:

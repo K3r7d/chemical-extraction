@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
+import base64
+from pathlib import Path
+
 import httpx
+
+_IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
+_MIME = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
 
 
 class VLLMClient:
@@ -30,12 +36,19 @@ class VLLMClient:
         self,
         prompt: str,
         *,
+        images: list[Path] | None = None,
         max_tokens: int | None = None,
         temperature: float | None = None,
     ) -> str:
+        """Send prompt to the LLM, optionally with images for vision models."""
+        if images:
+            content: str | list = _build_multimodal_content(prompt, images)
+        else:
+            content = prompt
+
         body = {
             "model": self._model_name,
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": [{"role": "user", "content": content}],
             "max_tokens": max_tokens or self._default_max_tokens,
             "temperature": (
                 temperature if temperature is not None else self._default_temperature
@@ -59,3 +72,19 @@ class VLLMClient:
                 return resp.status_code == 200
             except httpx.RequestError:
                 return False
+
+
+def _build_multimodal_content(text: str, images: list[Path]) -> list[dict]:
+    """Build an OpenAI-compatible multimodal content list (text + base64 images)."""
+    content: list[dict] = [{"type": "text", "text": text}]
+    for img_path in images:
+        suffix = img_path.suffix.lower()
+        if suffix not in _IMAGE_SUFFIXES:
+            continue
+        mime = _MIME[suffix]
+        data = base64.b64encode(img_path.read_bytes()).decode()
+        content.append({
+            "type": "image_url",
+            "image_url": {"url": f"data:{mime};base64,{data}"},
+        })
+    return content
