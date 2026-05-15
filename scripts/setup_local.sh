@@ -86,17 +86,20 @@ else
     echo "  Downloading ${CHEMVLM_MODEL_ID} to ${CHEMVLM_MODEL_DIR} (~8 GB)..."
     # hf_transfer uses parallel chunked downloads — much faster than ModelScope
     # on high-bandwidth nodes. Falls back to ModelScope if HF download fails.
-    if HF_HUB_ENABLE_HF_TRANSFER=1 uv run python - <<EOF 2>/dev/null
+    HF_HUB_ENABLE_HF_TRANSFER=1 uv run python - 2>/dev/null <<'PYEOF' && HF_OK=1 || HF_OK=0
 from huggingface_hub import snapshot_download
-snapshot_download("${CHEMVLM_MODEL_ID}", local_dir="${CHEMVLM_MODEL_DIR}", local_dir_use_symlinks=False)
-EOF
+import os
+snapshot_download(os.environ["CHEMVLM_MODEL_ID"], local_dir=os.environ["CHEMVLM_MODEL_DIR"], local_dir_use_symlinks=False)
+PYEOF
+    if [ "$HF_OK" = "1" ]; then
         echo "  Done (via HuggingFace)."
     else
         echo "  HuggingFace failed, falling back to ModelScope..."
-        uv run python - <<EOF
+        uv run python - <<'PYEOF'
 from modelscope import snapshot_download
-snapshot_download("${CHEMVLM_MODEL_ID}", local_dir="${CHEMVLM_MODEL_DIR}")
-EOF
+import os
+snapshot_download(os.environ["CHEMVLM_MODEL_ID"], local_dir=os.environ["CHEMVLM_MODEL_DIR"])
+PYEOF
         echo "  Done (via ModelScope)."
     fi
 fi
