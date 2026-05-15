@@ -4,8 +4,6 @@
 
 # ── Service URLs ──────────────────────────────────────────────────────────────
 mineru_url: http://mineru:8000
-vision_url: http://vision:8001
-chemvlm_url: http://chemvlm:8002
 llm_url: http://llm:8000/v1
 
 # ── LLM ──────────────────────────────────────────────────────────────────────
@@ -19,8 +17,6 @@ llm_dtype: auto              # vLLM --dtype (auto, bfloat16, float16)
 
 # ── Service timeouts (seconds) ───────────────────────────────────────────────
 mineru_timeout_s: 600.0
-vision_timeout_s: 120.0
-chemvlm_timeout_s: 300.0
 
 # ── Pipeline ──────────────────────────────────────────────────────────────────
 pipeline_max_retries: 2

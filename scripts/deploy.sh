@@ -44,7 +44,7 @@ if [ "$MODE" = "docker" ]; then
     until curl -sf http://localhost:28080/health | python3 -c "
 import json, sys
 d = json.load(sys.stdin)
-ok = all(d.get(k) for k in ['mineru', 'llm', 'vision', 'chemvlm'])
+ok = all(d.get(k) for k in ['mineru', 'llm'])
 print('  ' + ('✓ All services healthy' if ok else '✗ ' + str(d)))
 sys.exit(0 if ok else 1)
 " 2>/dev/null; do
@@ -100,27 +100,10 @@ uv run uvicorn server:app --host 127.0.0.1 --port 28010 \
     > logs/mineru.log 2>&1 &
 echo $! > /tmp/a2i2-mineru.pid
 
-echo "=== Starting vision service (port 28001) ==="
-PYTHONPATH=src:services/vision \
-VISION_OCSR_CHECKPOINT="${VISION_OCSR_CHECKPOINT:-${HOME}/.cache/molnextr/molnextr_best.pth}" \
-uv run uvicorn server:app --host 127.0.0.1 --port 28001 \
-    > logs/vision.log 2>&1 &
-echo $! > /tmp/a2i2-vision.pid
-
-echo "=== Starting ChemVLM service (port 28002) ==="
-CHEMVLM_MODEL_DIR="${CHEMVLM_MODEL_DIR:-${HOME}/.cache/chemvlm/TinyChemVL}" \
-CHEMVLM_MODEL_ID="${CHEMVLM_MODEL_ID:-Noct25/TinyChemVL}" \
-PYTHONPATH=services/chemvlm \
-uv run uvicorn server:app --host 127.0.0.1 --port 28002 \
-    > logs/chemvlm.log 2>&1 &
-echo $! > /tmp/a2i2-chemvlm.pid
-
 echo "=== Starting orchestrator (port 28080) ==="
 MINERU_URL=http://127.0.0.1:28010 \
 LLM_URL=http://127.0.0.1:28000/v1 \
 LLM_MODEL_NAME="$LLM_MODEL" \
-VISION_URL=http://127.0.0.1:28001 \
-CHEMVLM_URL=http://127.0.0.1:28002 \
 OUTPUT_DIR=outputs \
 uv run uvicorn a2i2_extraction.api:app --host 127.0.0.1 --port 28080 \
     > logs/orchestrator.log 2>&1 &
@@ -144,10 +127,10 @@ _check_health() {
 import json, sys
 d = json.load(sys.stdin)
 parts = []
-for k in ['mineru', 'llm', 'vision', 'chemvlm']:
+for k in ['mineru', 'llm']:
     parts.append(('✓' if d.get(k) else '✗') + k)
 print('  health: ' + '  '.join(parts))
-sys.exit(0 if all(d.get(k) for k in ['mineru','llm','vision','chemvlm']) else 1)
+sys.exit(0 if all(d.get(k) for k in ['mineru','llm']) else 1)
 " 2>/dev/null
 }
 
@@ -155,8 +138,6 @@ until _check_health; do
     echo "-- $(date '+%H:%M:%S') --"
     _tail_log "llm"        logs/llm.log
     _tail_log "mineru"     logs/mineru.log
-    _tail_log "vision"     logs/vision.log
-    _tail_log "chemvlm"    logs/chemvlm.log
     _tail_log "orchestrat" logs/orchestrator.log
     echo ""
     sleep 15

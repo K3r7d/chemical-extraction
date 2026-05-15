@@ -9,8 +9,6 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from .clients import MinerUHTTPClient, VLLMClient
-from .clients.chemvlm import ChemVLMHTTPClient
-from .clients.vision import VisionClient
 from .config import get_settings
 from .pipeline import Pipeline
 
@@ -44,8 +42,6 @@ def _build_pipeline() -> Pipeline:
         model_name=s.llm_model_name,
         output_dir=Path(s.output_dir),
         max_retries=s.pipeline_max_retries,
-        vision=VisionClient(s.vision_url, timeout_s=s.vision_timeout_s),
-        chemvlm=ChemVLMHTTPClient(s.chemvlm_url, timeout_s=s.chemvlm_timeout_s),
     )
 
 
@@ -56,15 +52,11 @@ async def health() -> dict:
     llm_ok = await VLLMClient(
         s.llm_url, model_name=s.llm_model_name, api_key=s.llm_api_key
     ).health()
-    vision_ok = await VisionClient(s.vision_url).health()
-    chemvlm_ok = await ChemVLMHTTPClient(s.chemvlm_url).health()
-    all_ok = mineru_ok and llm_ok and vision_ok and chemvlm_ok
+    all_ok = mineru_ok and llm_ok
     return {
         "status": "ok" if all_ok else "degraded",
         "mineru": mineru_ok,
         "llm": llm_ok,
-        "vision": vision_ok,
-        "chemvlm": chemvlm_ok,
     }
 
 

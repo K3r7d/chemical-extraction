@@ -26,8 +26,6 @@ class Settings(BaseSettings):
 
     # ── Service URLs ──────────────────────────────────────────────────────────
     mineru_url: str
-    vision_url: str
-    chemvlm_url: str
     llm_url: str
 
     # ── LLM ───────────────────────────────────────────────────────────────────
@@ -41,8 +39,6 @@ class Settings(BaseSettings):
 
     # ── Service timeouts ──────────────────────────────────────────────────────
     mineru_timeout_s: float = Field(gt=0)
-    vision_timeout_s: float = Field(gt=0)
-    chemvlm_timeout_s: float = Field(gt=0)
 
     # ── Pipeline ──────────────────────────────────────────────────────────────
     pipeline_max_retries: int = Field(ge=0)

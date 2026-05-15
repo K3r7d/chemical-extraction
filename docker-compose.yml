@@ -1,4 +1,4 @@
-# a2i2-extraction stack: orchestrator + MinerU + vision + ChemVLM + vLLM.
+# a2i2-extraction stack: orchestrator + MinerU + vLLM.
 #
 # To change the LLM model, edit LLM_MODEL here (two places: orchestrator + llm).
 # One-touch start: docker compose up -d
@@ -20,8 +20,6 @@ services:
     image: a2i2/orchestrator:0.1.0
     environment:
       MINERU_URL: http://mineru:8000
-      VISION_URL: http://vision:8001
-      CHEMVLM_URL: http://chemvlm:8002
       LLM_URL: http://llm:8000/v1
       LLM_MODEL_NAME: *llm-model
       OUTPUT_DIR: /outputs
@@ -34,8 +32,6 @@ services:
       data-init:
         condition: service_completed_successfully
       mineru:
-        condition: service_healthy
-      vision:
         condition: service_healthy
       llm:
         condition: service_healthy
@@ -60,54 +56,6 @@ services:
       retries: 5
       start_period: 120s
 
-  vision:
-    build:
-      context: .
-      dockerfile: docker/vision.Dockerfile
-    image: a2i2/vision:0.1.0
-    runtime: nvidia
-    environment:
-      NVIDIA_VISIBLE_DEVICES: "0"
-      VISION_TRIAGE_MODEL: google/siglip2-so400m-patch14-384
-      VISION_OCSR_CHECKPOINT: /cache/molnextr/molnextr_best.pth
-      VISION_BATCH_SIZE: "8"
-    ports:
-      - "28001:8001"
-    volumes:
-      - ./outputs:/outputs
-      - hf-cache:/cache/huggingface
-      - molnextr-cache:/cache/molnextr
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8001/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 5
-      start_period: 180s
-
-  chemvlm:
-    build:
-      context: .
-      dockerfile: docker/chemvlm.Dockerfile
-    image: a2i2/chemvlm:0.1.0
-    runtime: nvidia
-    environment:
-      NVIDIA_VISIBLE_DEVICES: "0"
-      CHEMVLM_MODEL_DIR: /cache/chemvlm/TinyChemVL
-      CHEMVLM_MODEL_ID: Noct25/TinyChemVL
-      CHEMVLM_QUANTIZE: none        # bf16; set to 4bit if VRAM is limited
-      CHEMVLM_MAX_NEW_TOKENS: "512"
-    ports:
-      - "28002:8002"
-    volumes:
-      - ./outputs:/outputs
-      - chemvlm-cache:/cache/chemvlm
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8002/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 5
-      start_period: 300s
-
   llm:
     build:
       context: .
@@ -115,9 +63,9 @@ services:
     image: a2i2/vllm:0.1.0
     runtime: nvidia
     environment:
-      NVIDIA_VISIBLE_DEVICES: all   # use every GPU not taken by support services
+      NVIDIA_VISIBLE_DEVICES: all
       LLM_MODEL_NAME: *llm-model
-      TENSOR_PARALLEL_SIZE: auto    # entrypoint detects GPU count at startup
+      TENSOR_PARALLEL_SIZE: auto
       LLM_DTYPE: auto
       LLM_MAX_MODEL_LEN: "65536"
     ports:
@@ -134,5 +82,3 @@ services:
 
 volumes:
   hf-cache:
-  molnextr-cache:
-  chemvlm-cache:

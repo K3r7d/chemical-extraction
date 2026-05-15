@@ -1,4 +1,4 @@
-"""Pipeline: parse → vision → extract → validate."""
+"""Pipeline: parse → extract → validate."""
 
 from __future__ import annotations
 
@@ -6,24 +6,16 @@ import json
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import structlog
-
-import httpx
 
 from .clients.base import LLMClient, MinerUClient, ParsedDocument
 from .preprocessing import clean_text, trim_references
 from .prompts import build_extraction_prompt
 from .validators import Issue, Severity, validate_extraction
-from .vision.intermediate import build_intermediate
-from .vision.panel_extract import extract_panels
-
-if TYPE_CHECKING:
-    from .clients.chemvlm import ChemVLMHTTPClient
-    from .clients.vision import VisionClient
 
 log = structlog.get_logger(__name__)
+
 
 @dataclass
 class ExtractionResult:
@@ -46,16 +38,12 @@ class Pipeline:
         model_name: str,
         output_dir: Path,
         max_retries: int = 2,
-        vision: VisionClient | None = None,
-        chemvlm: ChemVLMHTTPClient | None = None,
     ) -> None:
         self._mineru = mineru
         self._llm = llm
         self._model_name = model_name
         self._output_dir = output_dir
         self._max_retries = max_retries
-        self._vision = vision
-        self._chemvlm = chemvlm
 
     async def run(self, paper_dir: Path) -> ExtractionResult:
         log.info("pipeline.start", paper_dir=str(paper_dir))
@@ -73,18 +61,14 @@ class Pipeline:
         if si_doc and si_text:
             self._save_cleaned(si_doc, si_text)
 
-        intermediate = await self._run_vision(main_doc, main_text)
-
         prompt = build_extraction_prompt(
             paper_text=main_text,
             si_text=si_text,
-            intermediate=intermediate.to_dict() if intermediate else None,
         )
         log.info("pipeline.llm_call", prompt_chars=len(prompt))
 
         extraction, issues, retries = await self._extract_with_retry(prompt)
 
-        # Stamp the runtime metadata if the model didn't.
         extraction.setdefault("extraction", {})
         extraction["extraction"].setdefault("prompt_version", "v3.4")
         extraction["extraction"].setdefault("model_name", self._model_name)
@@ -110,11 +94,6 @@ class Pipeline:
     async def _extract_with_retry(
         self, prompt: str
     ) -> tuple[dict, list[Issue], int]:
-        """Call the LLM and validate, retrying up to _MAX_RETRIES times on errors.
-
-        Returns (extraction, issues, retry_count).
-        retry_count is 0 when the first attempt passes validation.
-        """
         raw = ""
         extraction: dict = {}
         issues: list[Issue] = []
@@ -145,80 +124,17 @@ class Pipeline:
 
         return extraction, issues, self._max_retries
 
-    async def _run_vision(self, doc: ParsedDocument, markdown_text: str):
-        """Stages 2–4: triage → OCSR → ChemVLM → intermediate.
-
-        Returns None when vision clients are not configured or output_dir is
-        unavailable (e.g. MinerUHTTPClient before the output_dir fix is deployed).
-        """
-        if self._vision is None or doc.output_dir is None:
-            log.info("pipeline.vision_skipped",
-                     reason="no vision client" if self._vision is None else "output_dir not set")
-            return None
-
-        log.info("pipeline.triage", output_dir=str(doc.output_dir))
-        try:
-            triage_results = await self._vision.triage(doc.output_dir)
-        except (httpx.RequestError, httpx.HTTPStatusError) as exc:
-            log.warning("pipeline.vision_unavailable", error=str(exc))
-            return None
-
-        kept = [r for r in triage_results if r["keep"]]
-        log.info("pipeline.triage_done", total=len(triage_results), kept=len(kept))
-
-        single_paths = [
-            doc.output_dir / r["img_path"]
-            for r in kept if r["image_class"] == "single_structure"
-        ]
-        ocsr_results: list[dict] = []
-        if single_paths:
-            log.info("pipeline.ocsr", n=len(single_paths))
-            try:
-                ocsr_results = await self._vision.ocsr(single_paths)
-                valid = sum(1 for r in ocsr_results if r.get("valid"))
-                log.info("pipeline.ocsr_done", valid=valid, total=len(ocsr_results))
-            except (httpx.RequestError, httpx.HTTPStatusError) as exc:
-                log.warning("pipeline.ocsr_unavailable", error=str(exc))
-
-        panel_compounds = []
-        if self._chemvlm is not None:
-            panels = [r for r in kept
-                      if r["image_class"] in {"structure_panel", "reaction_scheme"}]
-            if panels:
-                log.info("pipeline.chemvlm", n=len(panels))
-                try:
-                    panel_compounds = await extract_panels(
-                        triage_results,
-                        output_dir=doc.output_dir,
-                        client=self._chemvlm,
-                    )
-                    log.info("pipeline.chemvlm_done", compounds=len(panel_compounds))
-                except (httpx.RequestError, httpx.HTTPStatusError) as exc:
-                    log.warning("pipeline.chemvlm_unavailable", error=str(exc))
-
-        return build_intermediate(
-            markdown_text=markdown_text,
-            triage_results=triage_results,
-            ocsr_results=ocsr_results,
-            panel_compounds=panel_compounds,
-        )
-
     def _save_cleaned(self, doc: ParsedDocument, cleaned_text: str) -> None:
-        """Write cleaned markdown to outputs/cleaned/ mirroring the MinerU layout.
-
-        Only runs when doc.output_dir is set (MinerULocalClient always sets it;
-        MinerUHTTPClient currently does not — that is a known gap).
-        """
         if doc.output_dir is None:
             return
         mineru_root = self._output_dir / "mineru"
         try:
             rel = doc.output_dir.relative_to(mineru_root)
         except ValueError:
-            return  # output_dir not inside our mineru/ tree
+            return
         cleaned_dir = self._output_dir / "cleaned" / rel
         cleaned_dir.mkdir(parents=True, exist_ok=True)
-        stem = doc.output_dir.parent.name   # the paper slug, one level above auto/
+        stem = doc.output_dir.parent.name
         out = cleaned_dir / f"{stem}.md"
         out.write_text(cleaned_text, encoding="utf-8")
         log.info("pipeline.cleaned_saved", path=str(out), chars=len(cleaned_text))
@@ -252,11 +168,6 @@ class Pipeline:
 
 
 def _resolve_paper_files(paper_dir: Path) -> tuple[Path, Path | None]:
-    """Pick (main_pdf, si_pdf) from a paper directory.
-
-    Convention: SI files contain '_si_' or 'supporting' (case-insensitive).
-    Anything else is treated as the main paper.
-    """
     pdfs = sorted(p for p in paper_dir.iterdir() if p.suffix.lower() == ".pdf")
     if not pdfs:
         raise FileNotFoundError(f"no PDFs in {paper_dir}")
@@ -271,7 +182,6 @@ def _resolve_paper_files(paper_dir: Path) -> tuple[Path, Path | None]:
 
 
 def _retry_prompt(original: str, previous_raw: str, issues: list[Issue]) -> str:
-    """Build a follow-up prompt that shows the model its violations and asks it to fix them."""
     violations = "\n".join(
         f"- [{i.code}] {i.path or '$'}: {i.message}"
         for i in issues
@@ -288,14 +198,8 @@ def _retry_prompt(original: str, previous_raw: str, issues: list[Issue]) -> str:
 
 
 def _parse_llm_json(raw: str) -> dict:
-    """Strip optional markdown fences then parse JSON.
-
-    The prompt forbids text-before-or-after, but models occasionally wrap in
-    ```json fences. We tolerate that and nothing else.
-    """
     text = raw.strip()
     if text.startswith("```"):
-        # drop the opening fence (with or without language tag) and the closing one
         text = text.split("\n", 1)[1] if "\n" in text else text
         if text.endswith("```"):
             text = text[: -3].rstrip()
