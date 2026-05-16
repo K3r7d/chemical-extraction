@@ -67,6 +67,12 @@ fi
 # ── Local mode ────────────────────────────────────────────────────────────────
 echo "=== Local mode: starting services without Docker ==="
 
+# Pin uv to ./.venv on hosts (e.g. Vast.ai PyTorch templates) that pre-set
+# VIRTUAL_ENV to a system Python that lacks our deps. Setup_local.sh does
+# the same — keep them in sync.
+unset VIRTUAL_ENV
+export UV_PROJECT_ENVIRONMENT="${UV_PROJECT_ENVIRONMENT:-.venv}"
+
 echo ""
 echo "=== Downloading paper corpus (skips if already present) ==="
 bash "$(dirname "$0")/download_data.sh"
@@ -117,6 +123,7 @@ echo "=== Starting MinerU service (port 28010) ==="
 # MINERU_CACHE_ONLY=1 forces the server to serve only pre-existing outputs
 # (use after scripts/pull_outputs.sh) — never invokes the CLI.
 MINERU_OUTPUT_ROOT=outputs/mineru \
+DATA_PAPERS_ROOT="${DATA_PAPERS_ROOT:-data/papers}" \
 MINERU_CACHE_ONLY="${MINERU_CACHE_ONLY:-0}" \
 PYTHONPATH=services/mineru \
 uv run uvicorn server:app --host 127.0.0.1 --port 28010 \

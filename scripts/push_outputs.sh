@@ -11,6 +11,11 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+# Force uv to use the project .venv even on hosts (e.g. Vast.ai PyTorch
+# templates) that pre-set VIRTUAL_ENV to an incompatible system Python.
+unset VIRTUAL_ENV
+export UV_PROJECT_ENVIRONMENT="${UV_PROJECT_ENVIRONMENT:-.venv}"
+
 HF_REPO="${HF_REPO:-Dyrekk/chem-extract}"
 LOCAL_DIR="outputs/mineru"
 PATH_IN_REPO="."

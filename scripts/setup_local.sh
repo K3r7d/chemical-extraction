@@ -13,6 +13,13 @@ TEST_MODE="${A2I2_TEST_MODE:-0}"
 
 cd "$(dirname "$0")/.."
 
+# Vast.ai PyTorch templates pre-activate /venv/main via VIRTUAL_ENV in the
+# shell. Without unsetting it, `uv pip install` ignores our project .venv and
+# installs into the host's Python 3.14 env, which has no vllm-compatible
+# wheels. Force every uv command in this script to target ./.venv only.
+unset VIRTUAL_ENV
+export UV_PROJECT_ENVIRONMENT="${UV_PROJECT_ENVIRONMENT:-.venv}"
+
 # ── 1. Python venv ─────────────────────────────────────────────────────────────
 echo "=== Setting up Python environment ==="
 
@@ -52,7 +59,9 @@ if [ "$TEST_MODE" = "1" ]; then
     echo "  TEST_MODE — skipping (requires CUDA)."
 else
     # Pinned to match docker/vllm.Dockerfile (FROM vllm/vllm-openai:v0.20.2).
-    uv pip install "vllm==0.20.2"
+    # --python pins the install target to the project venv; without this,
+    # uv falls back to $VIRTUAL_ENV or system Python on hosts that pre-set them.
+    uv pip install --python .venv/bin/python "vllm==0.20.2"
 fi
 
 # ── Done ──────────────────────────────────────────────────────────────────────
