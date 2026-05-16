@@ -9,9 +9,11 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 MODE="docker"
+MINERU_ONLY=0
 for arg in "$@"; do
   case $arg in
     --local) MODE="local" ;;
+    --mineru-only) MINERU_ONLY=1; MODE="local" ;;
   esac
 done
 
@@ -71,6 +73,15 @@ bash "$(dirname "$0")/download_data.sh"
 
 LLM_MODEL="${LLM_MODEL_NAME:-Qwen/Qwen3.5-9B}"
 GPU_COUNT=$(nvidia-smi --list-gpus 2>/dev/null | wc -l || echo "1")
+# Cap vLLM VRAM so MinerU has room for its layout/OCR models (~4 GB headroom
+# per card). 0.75 works on 16 GiB cards; override via VLLM_GPU_MEM_UTIL.
+# In cache-only mode (MINERU_CACHE_ONLY=1) MinerU never invokes the CLI, so
+# vLLM can take the full GPU.
+if [ "${MINERU_CACHE_ONLY:-0}" = "1" ]; then
+    VLLM_GPU_MEM_UTIL="${VLLM_GPU_MEM_UTIL:-0.90}"
+else
+    VLLM_GPU_MEM_UTIL="${VLLM_GPU_MEM_UTIL:-0.75}"
+fi
 
 mkdir -p logs
 
@@ -82,26 +93,51 @@ for pidfile in /tmp/a2i2-*.pid; do
     rm -f "$pidfile"
 done
 
-echo ""
-echo "=== Starting vLLM (port 28000) ==="
-uv run python -m vllm.entrypoints.openai.api_server \
-    --model "$LLM_MODEL" \
-    --tensor-parallel-size "$GPU_COUNT" \
-    --dtype auto \
-    --max-model-len 65536 \
-    --host 127.0.0.1 --port 28000 \
-    > logs/llm.log 2>&1 &
-echo $! > /tmp/a2i2-llm.pid
+if [ "$MINERU_ONLY" = "1" ]; then
+    echo ""
+    echo "=== Skipping vLLM (--mineru-only) ==="
+else
+    echo ""
+    echo "=== Starting vLLM (port 28000) ==="
+    uv run python -m vllm.entrypoints.openai.api_server \
+        --model "$LLM_MODEL" \
+        --tensor-parallel-size "$GPU_COUNT" \
+        --gpu-memory-utilization "$VLLM_GPU_MEM_UTIL" \
+        --dtype auto \
+        --max-model-len 65536 \
+        --host 127.0.0.1 --port 28000 \
+        > logs/llm.log 2>&1 &
+    echo $! > /tmp/a2i2-llm.pid
+fi
 
 echo "=== Starting MinerU service (port 28010) ==="
-# CPU by default: vLLM fully occupies the GPU(s) in local mode, so MinerU
-# would CUDA-OOM. Override with MINERU_DEVICE_MODE=cuda if there's headroom.
+# Device auto-detects (cuda when available). VRAM headroom is reserved by
+# capping vLLM via VLLM_GPU_MEM_UTIL above. Override with MINERU_DEVICE_MODE=cpu
+# only if the GPU truly has no room.
+# MINERU_CACHE_ONLY=1 forces the server to serve only pre-existing outputs
+# (use after scripts/pull_outputs.sh) — never invokes the CLI.
 MINERU_OUTPUT_ROOT=outputs/mineru \
-MINERU_DEVICE_MODE="${MINERU_DEVICE_MODE:-cpu}" \
+MINERU_CACHE_ONLY="${MINERU_CACHE_ONLY:-0}" \
 PYTHONPATH=services/mineru \
 uv run uvicorn server:app --host 127.0.0.1 --port 28010 \
     > logs/mineru.log 2>&1 &
 echo $! > /tmp/a2i2-mineru.pid
+
+if [ "$MINERU_ONLY" = "1" ]; then
+    echo ""
+    echo "=== Skipping orchestrator (--mineru-only) ==="
+    echo ""
+    echo "=== Waiting for MinerU to be ready ==="
+    until curl -sf http://127.0.0.1:28010/health >/dev/null 2>&1; do
+        sleep 2
+    done
+    echo "  ✓ MinerU ready at http://127.0.0.1:28010"
+    echo ""
+    echo "  Next: parse all papers, then push to HF"
+    echo "    bash scripts/parse_all_local.sh"
+    echo "    bash scripts/push_outputs.sh"
+    exit 0
+fi
 
 echo "=== Starting orchestrator (port 28080) ==="
 MINERU_URL=http://127.0.0.1:28010 \
