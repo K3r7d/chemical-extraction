@@ -24,6 +24,20 @@ Can run via Docker Compose or directly as local processes.
 
 ---
 
+## Log into HuggingFace (required before setup)
+
+The LLM weights (and the parsed-output dataset, if you use cache-only mode) are pulled from HuggingFace. Log in **before** running any setup or deploy script so downloads don't fail partway through:
+
+```bash
+uv run python -c "from huggingface_hub import login; login(token='hf_xxxYOURTOKEN')"
+# or, if you prefer an env var:
+export HF_TOKEN=hf_xxx...
+```
+
+Generate a token at https://huggingface.co/settings/tokens (read scope is enough; write scope is only needed for `push_outputs.sh`).
+
+---
+
 ## Deploy
 
 Two supported workflows:
