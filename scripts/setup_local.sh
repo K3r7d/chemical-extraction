@@ -16,18 +16,32 @@ cd "$(dirname "$0")/.."
 # ── 1. Python venv ─────────────────────────────────────────────────────────────
 echo "=== Setting up Python environment ==="
 
-# If the system Python already has torch (e.g. Vast.ai PyTorch template),
-# create the venv with system-site-packages so we don't re-download ~3 GB.
-if python3 -c "import torch" 2>/dev/null; then
-    echo "  System torch found — creating venv with --system-site-packages"
+# vllm 0.20.2 (and its flashinfer/cuda-tile deps) only ships wheels for
+# CPython 3.10–3.13. Newer hosts (e.g. some Vast.ai templates default to
+# 3.14) must use an isolated 3.12 venv instead of reusing system Python.
+SUPPORTED_PY="${A2I2_PINNED_PY:-3.12}"
+SYS_PY_OK=0
+if python3 -c "import sys; sys.exit(0 if (3,12) <= sys.version_info[:2] <= (3,13) else 1)" 2>/dev/null; then
+    SYS_PY_OK=1
+fi
+
+if [ "$SYS_PY_OK" = "1" ] && python3 -c "import torch" 2>/dev/null; then
+    sys_py=$(python3 -c "import sys; print('%d.%d'%sys.version_info[:2])")
+    echo "  System Python $sys_py with torch — creating venv with --system-site-packages"
     [ -d .venv ] || uv venv --system-site-packages
     uv sync \
         --no-install-package torch \
         --no-install-package torchvision \
         --no-install-package torchaudio
 else
-    echo "  No system torch — creating isolated venv (torch will be installed)"
-    [ -d .venv ] || uv venv
+    if [ "$SYS_PY_OK" != "1" ]; then
+        sys_py=$(python3 -c "import sys; print('%d.%d'%sys.version_info[:2])" 2>/dev/null || echo "unknown")
+        echo "  System Python $sys_py is outside vllm's supported range (3.12-3.13)."
+        echo "  Creating isolated venv on Python $SUPPORTED_PY (torch will be downloaded)."
+    else
+        echo "  No system torch — creating isolated venv (torch will be installed)"
+    fi
+    [ -d .venv ] || uv venv --python "$SUPPORTED_PY"
     uv sync
 fi
 
