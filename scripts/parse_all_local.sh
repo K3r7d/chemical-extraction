@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Send every PDF in data/papers/ through the local MinerU service.
-# Outputs land in outputs/mineru/<pdf_stem>/ with debug artifacts pruned.
-# Cache hits are returned instantly, so re-running is safe and resumable.
+# Outputs land alongside the PDF at data/papers/<N>/mineru/<stem>/auto/
+# with debug artifacts pruned. Cache hits return instantly, so re-running
+# is safe and resumable.
 #
 # Prereq: MinerU service running on port 28010 (start it via
 #   bash scripts/deploy.sh --mineru-only
@@ -45,8 +46,5 @@ done
 
 echo ""
 echo "=== Done ==="
-size=$(du -sh outputs/mineru 2>/dev/null | cut -f1)
-echo "  outputs/mineru: $size"
-echo ""
-echo "  Next: push to HF"
-echo "    bash scripts/push_outputs.sh"
+size=$(du -csh data/papers/*/mineru 2>/dev/null | tail -1 | cut -f1)
+echo "  data/papers/*/mineru total: ${size:-0}"

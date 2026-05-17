@@ -137,14 +137,13 @@ class Pipeline:
     def _save_cleaned(self, doc: ParsedDocument, cleaned_text: str) -> None:
         if doc.output_dir is None:
             return
-        mineru_root = self._output_dir / "mineru"
-        try:
-            rel = doc.output_dir.relative_to(mineru_root)
-        except ValueError:
+        # mineru output_dir is <data_root>/<N>/mineru/<stem>/auto
+        parts = doc.output_dir.parts
+        if len(parts) < 4 or parts[-3] != "mineru" or parts[-1] != "auto":
             return
-        cleaned_dir = self._output_dir / "cleaned" / rel
+        n, stem = parts[-4], parts[-2]
+        cleaned_dir = self._output_dir / "cleaned" / n / stem / "auto"
         cleaned_dir.mkdir(parents=True, exist_ok=True)
-        stem = doc.output_dir.parent.name
         out = cleaned_dir / f"{stem}.md"
         out.write_text(cleaned_text, encoding="utf-8")
         log.info("pipeline.cleaned_saved", path=str(out), chars=len(cleaned_text))

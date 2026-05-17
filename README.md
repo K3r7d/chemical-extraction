@@ -19,33 +19,14 @@ Can run via Docker Compose or directly as local processes.
 - NVIDIA GPU(s) with CUDA 12+
 - `uv` (Python package manager)
 - **Docker mode only:** Docker ≥ 24 with [nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html)
-- **Cache-only mode:** a HuggingFace account with read access to [`Dyrekk/chem-extract`](https://huggingface.co/datasets/Dyrekk/chem-extract) (public — no token needed unless the repo is private)
-- **Pushing parsed outputs:** HuggingFace token with write scope on the target dataset (`HF_TOKEN` env var or one-time `huggingface_hub.login()`)
-
----
-
-## Log into HuggingFace (required before setup)
-
-The LLM weights (and the parsed-output dataset, if you use cache-only mode) are pulled from HuggingFace. Log in **before** running any setup or deploy script so downloads don't fail partway through:
-
-```bash
-uv run python -c "from huggingface_hub import login; login(token='hf_xxxYOURTOKEN')"
-# or, if you prefer an env var:
-export HF_TOKEN=hf_xxx...
-```
-
-Generate a token at https://huggingface.co/settings/tokens (read scope is enough; write scope is only needed for `push_outputs.sh`).
 
 ---
 
 ## Deploy
 
-Two supported workflows:
+The paper corpus zip on Google Drive ships with **pre-parsed MinerU output bundled alongside each PDF** — `data/papers/<N>/` contains both the source PDFs and a `mineru/` subfolder with the parsed markdown + figures. MinerU serves those straight from disk on cache hits. Only when a PDF has no cached `mineru/` output does the MinerU CLI actually run.
 
-1. **With MinerU** — run the full stack and parse PDFs on this machine. Use when you have ≥16 GiB VRAM (MinerU + vLLM share the GPU) or a CPU-only MinerU setup.
-2. **Without MinerU** — pull pre-parsed markdown from the HuggingFace dataset and run only the LLM + orchestrator. Use on small/single-GPU vast.ai boxes where MinerU's models would fight vLLM for VRAM.
-
-### A. Docker mode (with MinerU)
+### A. Docker mode
 
 ```bash
 git clone https://github.com/K3r7d/chemical-extraction.git && cd chemical-extraction
@@ -53,11 +34,11 @@ git clone https://github.com/K3r7d/chemical-extraction.git && cd chemical-extrac
 bash scripts/deploy.sh
 ```
 
-Paper data is downloaded automatically on first run. Subsequent starts skip the download.
+Paper data (PDFs + pre-parsed mineru output) is downloaded automatically on first run. Subsequent starts skip the download.
 
-### B. Local mode with MinerU (no Docker)
+### B. Local mode (no Docker)
 
-For Vast.ai, WSL, or unprivileged containers where Docker isn't available but there's enough VRAM for both services.
+For Vast.ai, WSL, or unprivileged containers where Docker isn't available.
 
 ```bash
 git clone https://github.com/K3r7d/chemical-extraction.git && cd chemical-extraction
@@ -71,32 +52,15 @@ bash scripts/deploy.sh --local
 
 On Vast.ai PyTorch templates, `setup_local.sh` reuses the pre-installed torch automatically. Services start as background processes on localhost; logs go to `logs/`.
 
-### C. Local mode without MinerU (cache-only, recommended for vast.ai)
-
-The MinerU outputs for the 21-paper corpus are published at [`Dyrekk/chem-extract`](https://huggingface.co/datasets/Dyrekk/chem-extract). Pull them once, then run only vLLM + orchestrator — MinerU's model weights are never downloaded and the full GPU is available for the LLM.
+If every PDF in your zip already has cached mineru output, MinerU never invokes its CLI and you can give vLLM the whole GPU:
 
 ```bash
-git clone https://github.com/K3r7d/chemical-extraction.git && cd chemical-extraction
-bash scripts/setup_local.sh
-
-# 1) Fetch parsed markdown + figures from HuggingFace into outputs/mineru/
-bash scripts/pull_outputs.sh
-
-# 2) Start stack in cache-only mode (MinerU serves from disk, never invokes CLI)
-MINERU_CACHE_ONLY=1 bash scripts/deploy.sh --local
-
-# 3) Run extractions as usual
-bash scripts/extract_all.sh --local
+VLLM_GPU_MEM_UTIL=0.90 bash scripts/deploy.sh --local
 ```
 
-In cache-only mode:
-- `VLLM_GPU_MEM_UTIL` defaults to `0.90` (vs `0.75` with MinerU) — the LLM gets ~all of the GPU.
-- MinerU still listens on port 28010 but only resolves cache hits via `outputs/mineru/<N>/<stem>/auto/<stem>.md`. A cache miss returns HTTP 404.
-- The PDF corpus is still downloaded into `data/papers/` because the orchestrator drives the pipeline from those PDFs — it just won't re-parse them.
+### Re-parsing (adding new PDFs or refreshing cache)
 
-### Updating the dataset (parse-only mode)
-
-If you add new papers or want to re-parse, do it on a machine with VRAM headroom and push the results back:
+If you add new papers or want to re-parse, drop the PDF into `data/papers/<N>/` and run:
 
 ```bash
 # Start only MinerU (skips vLLM + orchestrator)
@@ -104,10 +68,9 @@ bash scripts/deploy.sh --mineru-only
 
 # Parse every PDF under data/papers/ (resumable — cache hits return instantly)
 bash scripts/parse_all_local.sh
-
-# Push outputs/mineru/ to Dyrekk/chem-extract (set HF_TOKEN or pre-login first)
-bash scripts/push_outputs.sh
 ```
+
+The parsed output lands at `data/papers/<N>/mineru/<stem>/auto/`, ready to be re-zipped for distribution.
 
 To stop all local services:
 
@@ -219,13 +182,18 @@ LLM_MODEL_NAME=Qwen/Qwen3.5-9B bash scripts/deploy.sh --local
 ## Output format
 
 ```
+data/
+  papers/
+    <n>/                      # one folder per paper (numbered)
+      <paper-slug>.pdf        # main paper
+      <slug>_si_<m>.pdf       # optional SI
+      mineru/                 # bundled in the data zip; created on cache miss
+        <paper-slug>/auto/
+          <slug>.md
+          images/*.jpg
 outputs/
   cleaned/                    # preprocessed markdown (headers, refs, noise stripped)
     <n>/<paper-slug>/auto/<slug>.md
-  mineru/                     # raw MinerU markdown + extracted figure images
-    <n>/<paper-slug>/auto/
-      <slug>.md
-      images/*.jpg
   <paper-slug>/               # extraction results
     extraction.json           # v3.4 schema output
     audit.json                # retries, extraction_status, validation issues

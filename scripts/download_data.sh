@@ -4,7 +4,7 @@
 # Works both locally (with gdown installed) and inside Docker (auto-installs gdown).
 set -euo pipefail
 
-GDRIVE_ID="1Z8VXF_O4iSa6ijTO3W3icnsfQxJgejgv"
+GDRIVE_ID="1FGqG19HCz1vhvq6Y95ap2CactQB6CHoO"
 
 if [ -d "data/papers" ]; then
     echo "[data-init] data/papers/ already present — skipping."

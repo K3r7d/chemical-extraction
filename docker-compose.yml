@@ -44,10 +44,9 @@ services:
     runtime: nvidia
     environment:
       NVIDIA_VISIBLE_DEVICES: "0"
-      MINERU_OUTPUT_ROOT: /outputs/mineru
+      DATA_PAPERS_ROOT: /data/papers
     volumes:
-      - ./data:/data:ro
-      - ./outputs:/outputs
+      - ./data:/data
       - hf-cache:/cache/huggingface
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]

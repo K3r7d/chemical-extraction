@@ -81,13 +81,9 @@ LLM_MODEL="${LLM_MODEL_NAME:-Qwen/Qwen3.5-9B}"
 GPU_COUNT=$(nvidia-smi --list-gpus 2>/dev/null | wc -l || echo "1")
 # Cap vLLM VRAM so MinerU has room for its layout/OCR models (~4 GB headroom
 # per card). 0.75 works on 16 GiB cards; override via VLLM_GPU_MEM_UTIL.
-# In cache-only mode (MINERU_CACHE_ONLY=1) MinerU never invokes the CLI, so
-# vLLM can take the full GPU.
-if [ "${MINERU_CACHE_ONLY:-0}" = "1" ]; then
-    VLLM_GPU_MEM_UTIL="${VLLM_GPU_MEM_UTIL:-0.90}"
-else
-    VLLM_GPU_MEM_UTIL="${VLLM_GPU_MEM_UTIL:-0.75}"
-fi
+# If the bundled data zip already contains parsed mineru output for every PDF,
+# MinerU never invokes the CLI and you can safely raise this to ~0.90.
+VLLM_GPU_MEM_UTIL="${VLLM_GPU_MEM_UTIL:-0.75}"
 
 mkdir -p logs
 
@@ -120,11 +116,9 @@ echo "=== Starting MinerU service (port 28010) ==="
 # Device auto-detects (cuda when available). VRAM headroom is reserved by
 # capping vLLM via VLLM_GPU_MEM_UTIL above. Override with MINERU_DEVICE_MODE=cpu
 # only if the GPU truly has no room.
-# MINERU_CACHE_ONLY=1 forces the server to serve only pre-existing outputs
-# (use after scripts/pull_outputs.sh) — never invokes the CLI.
-MINERU_OUTPUT_ROOT=outputs/mineru \
+# Parsed output is written into data/papers/<N>/mineru/, so a pre-built data
+# zip can ship cached mineru output alongside its PDFs.
 DATA_PAPERS_ROOT="${DATA_PAPERS_ROOT:-data/papers}" \
-MINERU_CACHE_ONLY="${MINERU_CACHE_ONLY:-0}" \
 PYTHONPATH=services/mineru \
 uv run uvicorn server:app --host 127.0.0.1 --port 28010 \
     > logs/mineru.log 2>&1 &
@@ -140,9 +134,8 @@ if [ "$MINERU_ONLY" = "1" ]; then
     done
     echo "  ✓ MinerU ready at http://127.0.0.1:28010"
     echo ""
-    echo "  Next: parse all papers, then push to HF"
+    echo "  Next: parse all papers (outputs land in data/papers/<N>/mineru/)"
     echo "    bash scripts/parse_all_local.sh"
-    echo "    bash scripts/push_outputs.sh"
     exit 0
 fi
 

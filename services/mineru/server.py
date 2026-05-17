@@ -1,24 +1,20 @@
 """MinerU HTTP wrapper.
 
-Accepts a PDF upload, shells to the mineru 3.x CLI (same pattern as
-MinerULocalClient), writes output to a shared volume, and returns the
-parsed content as JSON.
+Accepts a PDF upload, returns the parsed markdown + figures as JSON.
 
-Output root is shared with the orchestrator container via a bind-mounted
-volume (both containers mount ./outputs at /outputs), so image_path values
-in the response are valid absolute paths on both sides.
+Output lives **inside the paper folder** under DATA_PAPERS_ROOT:
+    <DATA_PAPERS_ROOT>/<N>/mineru/<stem>/auto/<stem>.md
+        + auto/images/*.jpg
 
-Outputs follow the canonical layout used by the HF dataset:
-    <MINERU_OUTPUT_ROOT>/<N>/<stem>/auto/<stem>.md
-where <N> is the paper-index folder under DATA_PAPERS_ROOT containing the
-input PDF. Stems not found under DATA_PAPERS_ROOT fall back to
-    <MINERU_OUTPUT_ROOT>/<stem>/auto/<stem>.md
+This means a freshly-downloaded data zip can ship pre-parsed mineru output
+alongside its PDFs and the server will serve straight from the cache without
+invoking the CLI. On a cache miss (no `<stem>.md` for the uploaded PDF) the
+server falls back to running `mineru` on the raw PDF and writes the output
+into the same folder.
 
 Environment variables:
-    MINERU_OUTPUT_ROOT  where parsed output lands (default /outputs/mineru)
-    DATA_PAPERS_ROOT    paper-index source for resolving <N> (default data/papers)
+    DATA_PAPERS_ROOT    paper-index root (default data/papers)
     MINERU_DEVICE_MODE  cuda | cpu | auto-detected via torch
-    MINERU_CACHE_ONLY   1 = serve cached results only, never invoke the CLI
     MINERU_KEEP_DEBUG   1 = retain debug PDFs / model.json / middle.json
 """
 
@@ -34,20 +30,12 @@ from pathlib import Path
 import uvicorn
 from fastapi import FastAPI, File, HTTPException, UploadFile
 
-OUTPUT_ROOT = Path(os.getenv("MINERU_OUTPUT_ROOT", "/outputs/mineru"))
-# Used to resolve a PDF stem back to its paper index so outputs land in the
-# canonical <root>/<N>/<stem>/auto/<stem>.md layout (matches the HF dataset).
-# Stems not found under DATA_PAPERS_ROOT fall back to <root>/<stem>/auto/.
 DATA_PAPERS_ROOT = Path(os.getenv("DATA_PAPERS_ROOT", "data/papers"))
 PARSE_TIMEOUT_S = float(os.getenv("MINERU_PARSE_TIMEOUT_S", "600"))
 # By default, prune MinerU's debug artifacts (origin/layout/span PDFs, model.json,
 # middle.json — together ~35 MB/paper) after a successful parse. Set
 # MINERU_KEEP_DEBUG=1 to retain them for troubleshooting.
 KEEP_DEBUG = os.getenv("MINERU_KEEP_DEBUG", "0") == "1"
-# Cache-only mode: return cached output if present, error otherwise. Never
-# invoke the mineru CLI — keeps GPU free for vLLM and avoids downloading the
-# ~5 GB of MinerU model weights. Use with scripts/pull_outputs.sh.
-CACHE_ONLY = os.getenv("MINERU_CACHE_ONLY", "0") == "1"
 
 app = FastAPI(title="mineru-service", version="0.1.0")
 
@@ -63,11 +51,7 @@ def _mineru_bin() -> str:
 
 
 def _resolve_paper_index(stem: str) -> str | None:
-    """Return the paper-index folder name (e.g. "7") that contains `<stem>.pdf`.
-
-    Lets the server place fresh outputs at <root>/<N>/<stem>/ instead of the
-    legacy flat <root>/<stem>/, so cached uploads and re-parses share one tree.
-    """
+    """Return the paper-index folder name (e.g. "7") that contains `<stem>.pdf`."""
     if not DATA_PAPERS_ROOT.is_dir():
         return None
     for paper_dir in DATA_PAPERS_ROOT.iterdir():
@@ -134,41 +118,42 @@ def _assemble_response(md_path: Path) -> dict:
     }
 
 
+def _cached_md(stem: str) -> Path | None:
+    """Return cached <stem>.md under data/papers/<any>/mineru/ if present."""
+    if not DATA_PAPERS_ROOT.is_dir():
+        return None
+    for paper_dir in DATA_PAPERS_ROOT.iterdir():
+        candidate = paper_dir / "mineru" / stem / "auto" / f"{stem}.md"
+        if candidate.exists():
+            return candidate
+    return None
+
+
 @app.post("/parse")
 async def parse(pdf: UploadFile = File(...)) -> dict:
     stem = Path(pdf.filename or "document").stem
 
-    # Cache lookup: find <stem>.md anywhere under OUTPUT_ROOT. Handles both
-    # the canonical <root>/<N>/<stem>/auto/<stem>.md layout and the legacy
-    # flat <root>/<stem>/auto/<stem>.md path.
-    cached = sorted(OUTPUT_ROOT.rglob(f"{stem}.md"))
-    # Last-resort: very old caches used tmp-prefixed filenames under
-    # <root>/<stem>/. Match any .md inside that legacy folder.
-    if not cached:
-        legacy_dir = OUTPUT_ROOT / stem
-        if legacy_dir.is_dir():
-            cached = sorted(legacy_dir.rglob("*.md"))
-    if cached:
-        return _assemble_response(cached[0])
+    cached = _cached_md(stem)
+    if cached is not None:
+        return _assemble_response(cached)
 
-    if CACHE_ONLY:
+    idx = _resolve_paper_index(stem)
+    if idx is None:
         raise HTTPException(
             status_code=404,
             detail=(
-                f"cache miss for {stem!r} and MINERU_CACHE_ONLY=1. "
-                f"Run scripts/pull_outputs.sh or unset MINERU_CACHE_ONLY."
+                f"cannot locate {stem!r} under {DATA_PAPERS_ROOT}/<N>/ — "
+                f"drop the PDF into a paper folder before parsing."
             ),
         )
 
-    idx = _resolve_paper_index(stem)
-    out_dir = (OUTPUT_ROOT / idx) if idx else OUTPUT_ROOT
+    out_dir = DATA_PAPERS_ROOT / idx / "mineru"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     pdf_bytes = await pdf.read()
 
     # Stage the upload as <stem>.pdf so MinerU writes
-    # <out_dir>/<stem>/auto/<stem>.md (rather than tmp<rand>.md from a
-    # randomly-named tempfile).
+    # <out_dir>/<stem>/auto/<stem>.md (rather than tmp<rand>.md).
     work_dir = Path(tempfile.mkdtemp(prefix="mineru-"))
     pdf_path = work_dir / f"{stem}.pdf"
     pdf_path.write_bytes(pdf_bytes)
@@ -207,7 +192,6 @@ async def parse(pdf: UploadFile = File(...)) -> dict:
                        + stderr.decode("utf-8", errors="replace")[-2000:],
             )
 
-        # MinerU 3.x writes <out_dir>/<stem>/auto/<stem>.md
         md_path = out_dir / stem / "auto" / f"{stem}.md"
         if not md_path.exists():
             fallback = list(out_dir.rglob(f"{stem}.md")) or list(out_dir.rglob("*.md"))

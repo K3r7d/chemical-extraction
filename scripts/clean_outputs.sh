@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Prune MinerU debug artifacts from outputs/mineru/.
+# Prune MinerU debug artifacts from data/papers/*/mineru/.
 #
 # Keeps: <stem>.md, <stem>_content_list.json, images/
 # Drops: <stem>_origin.pdf, <stem>_layout.pdf, <stem>_span.pdf,
@@ -12,7 +12,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-ROOT="outputs/mineru"
+ROOT="data/papers"
 APPLY=0
 for arg in "$@"; do
   case $arg in
