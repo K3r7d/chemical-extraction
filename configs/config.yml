@@ -9,7 +9,7 @@ llm_url: http://llm:8000/v1
 # ── LLM ──────────────────────────────────────────────────────────────────────
 llm_model_name: Qwen/Qwen3.5-9B
 llm_api_key: EMPTY
-llm_max_tokens: 32000        # max output tokens the LLM may generate
+llm_max_tokens: 16000        # max output tokens the LLM may generate
 llm_temperature: 0.0
 llm_request_timeout_s: 600.0
 llm_max_model_len: 65536     # vLLM --max-model-len (input + output context window)
