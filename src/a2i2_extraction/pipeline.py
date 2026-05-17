@@ -40,12 +40,14 @@ class Pipeline:
         model_name: str,
         output_dir: Path,
         max_retries: int = 2,
+        send_images: bool = True,
     ) -> None:
         self._mineru = mineru
         self._llm = llm
         self._model_name = model_name
         self._output_dir = output_dir
         self._max_retries = max_retries
+        self._send_images = send_images
 
     async def run(self, paper_dir: Path) -> ExtractionResult:
         log.info("pipeline.start", paper_dir=str(paper_dir))
@@ -63,8 +65,8 @@ class Pipeline:
         if si_doc and si_text:
             self._save_cleaned(si_doc, si_text)
 
-        images = _collect_images(main_doc, si_doc)
-        log.info("pipeline.images", count=len(images))
+        images = _collect_images(main_doc, si_doc) if self._send_images else []
+        log.info("pipeline.images", count=len(images), enabled=self._send_images)
 
         prompt = build_extraction_prompt(
             paper_text=main_text,

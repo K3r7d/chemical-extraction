@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     llm_request_timeout_s: float = Field(gt=0)
     llm_max_model_len: int = Field(ge=1)
     llm_dtype: str
+    llm_send_images: bool = True
 
     # ── Service timeouts ──────────────────────────────────────────────────────
     mineru_timeout_s: float = Field(gt=0)

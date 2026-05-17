@@ -42,6 +42,7 @@ def _build_pipeline() -> Pipeline:
         model_name=s.llm_model_name,
         output_dir=Path(s.output_dir),
         max_retries=s.pipeline_max_retries,
+        send_images=s.llm_send_images,
     )
 
 
