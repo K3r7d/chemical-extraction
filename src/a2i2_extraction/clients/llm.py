@@ -53,6 +53,9 @@ class VLLMClient:
             "temperature": (
                 temperature if temperature is not None else self._default_temperature
             ),
+            # Qwen3 ships with reasoning enabled by default and will spend the
+            # entire output budget on a <think> block, leaving no JSON.
+            "chat_template_kwargs": {"enable_thinking": False},
         }
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             resp = await client.post(
