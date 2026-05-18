@@ -56,6 +56,11 @@ class VLLMClient:
             # Qwen3 ships with reasoning enabled by default and will spend the
             # entire output budget on a <think> block, leaving no JSON.
             "chat_template_kwargs": {"enable_thinking": False},
+            # Force JSON object output (vLLM enforces via grammar-constrained decoding).
+            "response_format": {"type": "json_object"},
+            # Greedy decoding on long structured prompts can fall into repetition
+            # loops; a mild penalty breaks the cycle without hurting accuracy.
+            "repetition_penalty": 1.05,
         }
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             resp = await client.post(
