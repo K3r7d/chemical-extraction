@@ -38,7 +38,6 @@ def _build_pipeline() -> Pipeline:
             timeout_s=s.llm_request_timeout_s,
             default_max_tokens=s.llm_max_tokens,
             default_temperature=s.llm_temperature,
-            max_model_len=s.llm_max_model_len,
         ),
         model_name=s.llm_model_name,
         output_dir=Path(s.output_dir),

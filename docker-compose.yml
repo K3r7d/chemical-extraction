@@ -65,8 +65,8 @@ services:
       NVIDIA_VISIBLE_DEVICES: all
       LLM_MODEL_NAME: *llm-model
       TENSOR_PARALLEL_SIZE: auto
-      LLM_DTYPE: auto
-      LLM_MAX_MODEL_LEN: "65536"
+      LLM_DTYPE: bfloat16
+      LLM_MAX_MODEL_LEN: "81920"
     ports:
       - "28000:8000"
     volumes:

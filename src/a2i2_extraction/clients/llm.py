@@ -21,8 +21,6 @@ class VLLMClient:
         timeout_s: float = 600.0,
         default_max_tokens: int = 16000,
         default_temperature: float = 0.0,
-        max_model_len: int = 65536,
-        output_safety_margin: int = 256,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._model_name = model_name
@@ -33,8 +31,6 @@ class VLLMClient:
         self._timeout = httpx.Timeout(timeout_s)
         self._default_max_tokens = default_max_tokens
         self._default_temperature = default_temperature
-        self._max_model_len = max_model_len
-        self._output_safety_margin = output_safety_margin
 
     async def complete(
         self,
@@ -50,18 +46,15 @@ class VLLMClient:
         else:
             content = prompt
 
+        body = {
+            "model": self._model_name,
+            "messages": [{"role": "user", "content": content}],
+            "max_tokens": max_tokens or self._default_max_tokens,
+            "temperature": (
+                temperature if temperature is not None else self._default_temperature
+            ),
+        }
         async with httpx.AsyncClient(timeout=self._timeout) as client:
-            requested = max_tokens or self._default_max_tokens
-            effective_max_tokens = await self._fit_max_tokens(client, prompt, requested)
-
-            body = {
-                "model": self._model_name,
-                "messages": [{"role": "user", "content": content}],
-                "max_tokens": effective_max_tokens,
-                "temperature": (
-                    temperature if temperature is not None else self._default_temperature
-                ),
-            }
             resp = await client.post(
                 f"{self._base_url}/chat/completions",
                 json=body,
@@ -69,34 +62,6 @@ class VLLMClient:
             )
             resp.raise_for_status()
         return resp.json()["choices"][0]["message"]["content"]
-
-    async def _fit_max_tokens(
-        self, client: httpx.AsyncClient, prompt: str, requested: int
-    ) -> int:
-        """Tokenize the prompt and shrink max_tokens so the request fits the model window.
-
-        Falls back to `requested` if /tokenize is unavailable — vLLM will still
-        enforce the limit and surface a clear error.
-        """
-        try:
-            resp = await client.post(
-                f"{self._base_url}/tokenize",
-                json={"model": self._model_name, "prompt": prompt},
-                headers=self._headers,
-            )
-            resp.raise_for_status()
-            prompt_tokens = int(resp.json().get("count", 0))
-        except httpx.HTTPError:
-            return requested
-
-        available = self._max_model_len - prompt_tokens - self._output_safety_margin
-        if available < 1:
-            raise ValueError(
-                f"prompt too long: {prompt_tokens} tokens leaves no output room "
-                f"(max_model_len={self._max_model_len}, "
-                f"safety_margin={self._output_safety_margin})"
-            )
-        return min(requested, available)
 
     async def health(self) -> bool:
         async with httpx.AsyncClient(timeout=httpx.Timeout(5.0)) as client:
