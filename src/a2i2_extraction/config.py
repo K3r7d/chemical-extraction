@@ -42,7 +42,6 @@ class Settings(BaseSettings):
     mineru_timeout_s: float = Field(gt=0)
 
     # ── Pipeline ──────────────────────────────────────────────────────────────
-    pipeline_max_retries: int = Field(ge=0)
     output_dir: str
 
     @classmethod

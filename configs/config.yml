@@ -20,5 +20,4 @@ llm_send_images: false       # if false, skip mineru figures (text-only prompt)
 mineru_timeout_s: 600.0
 
 # ── Pipeline ──────────────────────────────────────────────────────────────────
-pipeline_max_retries: 2
 output_dir: outputs

@@ -22,8 +22,6 @@ class ExtractRequest(BaseModel):
 
 class ExtractResponse(BaseModel):
     paper_dir: str
-    error_count: int
-    warning_count: int
     output_path: str
 
 
@@ -41,7 +39,6 @@ def _build_pipeline() -> Pipeline:
         ),
         model_name=s.llm_model_name,
         output_dir=Path(s.output_dir),
-        max_retries=s.pipeline_max_retries,
         send_images=s.llm_send_images,
     )
 
@@ -67,11 +64,9 @@ async def extract(req: ExtractRequest) -> ExtractResponse:
     if not paper_dir.is_dir():
         raise HTTPException(404, f"paper_dir not found: {paper_dir}")
     pipeline = _build_pipeline()
-    result = await pipeline.run(paper_dir)
+    await pipeline.run(paper_dir)
     out = Path(get_settings().output_dir) / paper_dir.name / "extraction.json"
     return ExtractResponse(
         paper_dir=str(paper_dir),
-        error_count=sum(1 for i in result.issues if i.severity.value == "error"),
-        warning_count=sum(1 for i in result.issues if i.severity.value == "warning"),
         output_path=str(out),
     )
