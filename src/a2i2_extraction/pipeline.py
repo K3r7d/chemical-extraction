@@ -25,6 +25,7 @@ class ExtractionResult:
     extraction: dict
     issues: list[Issue] = field(default_factory=list)
     retries: int = 0
+    raw_responses: list[str] = field(default_factory=list)
 
     @property
     def has_errors(self) -> bool:
@@ -74,7 +75,7 @@ class Pipeline:
         )
         log.info("pipeline.llm_call", prompt_chars=len(prompt), images=len(images))
 
-        extraction, issues, retries = await self._extract_with_retry(
+        extraction, issues, retries, raw_responses = await self._extract_with_retry(
             prompt, images=images
         )
 
@@ -95,17 +96,22 @@ class Pipeline:
         )
 
         result = ExtractionResult(
-            paper_dir=paper_dir, extraction=extraction, issues=issues, retries=retries,
+            paper_dir=paper_dir,
+            extraction=extraction,
+            issues=issues,
+            retries=retries,
+            raw_responses=raw_responses,
         )
         self._write_output(result)
         return result
 
     async def _extract_with_retry(
         self, prompt: str, *, images: list[Path] | None = None
-    ) -> tuple[dict, list[Issue], int]:
+    ) -> tuple[dict, list[Issue], int, list[str]]:
         raw = ""
         extraction: dict = {}
         issues: list[Issue] = []
+        raws: list[str] = []
 
         for attempt in range(self._max_retries + 1):
             current_prompt = prompt if attempt == 0 else _retry_prompt(prompt, raw, issues)
@@ -114,27 +120,36 @@ class Pipeline:
                 # avoid re-sending large payloads when fixing validation issues.
                 attempt_images = images if attempt == 0 else None
                 raw = await self._llm.complete(current_prompt, images=attempt_images)
+                raws.append(raw)
                 extraction = _parse_llm_json(raw)
             except Exception as exc:
+                # If complete() itself raised, we never appended — record the failure.
+                if len(raws) <= attempt:
+                    raws.append(f"<<llm call failed: {exc}>>")
                 issues = [Issue(
                     code="JSON_PARSE",
                     severity=Severity.ERROR,
                     message=str(exc),
                     path="$",
                 )]
-                log.warning("pipeline.llm_json_error", attempt=attempt, error=str(exc))
+                log.warning(
+                    "pipeline.llm_json_error",
+                    attempt=attempt,
+                    error=str(exc),
+                    raw_chars=len(raw),
+                )
                 if attempt < self._max_retries:
                     continue
-                return extraction, issues, attempt
+                return extraction, issues, attempt, raws
 
             issues = validate_extraction(extraction)
             errors = [i for i in issues if i.severity is Severity.ERROR]
             if not errors:
-                return extraction, issues, attempt
+                return extraction, issues, attempt, raws
             if attempt < self._max_retries:
                 log.info("pipeline.retry", attempt=attempt + 1, violations=len(errors))
 
-        return extraction, issues, self._max_retries
+        return extraction, issues, self._max_retries, raws
 
     def _save_cleaned(self, doc: ParsedDocument, cleaned_text: str) -> None:
         if doc.output_dir is None:
@@ -172,10 +187,16 @@ class Pipeline:
                         }
                         for i in result.issues
                     ],
+                    "raw_response_chars": [len(r) for r in result.raw_responses],
                 },
                 indent=2,
             )
         )
+        if result.raw_responses:
+            raw_dir = out / "raw_llm"
+            raw_dir.mkdir(exist_ok=True)
+            for i, raw in enumerate(result.raw_responses):
+                (raw_dir / f"attempt_{i}.txt").write_text(raw, encoding="utf-8")
 
 
 def _collect_images(*docs: ParsedDocument | None) -> list[Path]:
