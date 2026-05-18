@@ -49,14 +49,13 @@ for paper_path in "${papers[@]}"; do
         continue
     }
 
-    errors=$(echo "$response" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('error_count',0))" 2>/dev/null)
-    warnings=$(echo "$response" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('warning_count',0))" 2>/dev/null)
+    output_path=$(echo "$response" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('output_path',''))" 2>/dev/null)
 
-    if [ "${errors:-1}" -eq 0 ]; then
-        echo "ok  (warnings=$warnings)"
+    if [ -n "$output_path" ] && [ -f "$output_path" ]; then
+        echo "ok  -> $output_path"
         (( done++ ))
     else
-        echo "FAILED  (errors=$errors warnings=$warnings)"
+        echo "FAILED  (no output_path or file missing)"
         (( failed++ ))
     fi
 done

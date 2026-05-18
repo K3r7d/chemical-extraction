@@ -12,7 +12,7 @@ llm_api_key: EMPTY
 llm_max_tokens: 16000        # max output tokens the LLM may generate
 llm_temperature: 0.0
 llm_request_timeout_s: 600.0
-llm_max_model_len: 81920     # vLLM --max-model-len (input + output context window)
+llm_max_model_len: 131072    # vLLM --max-model-len (input + output context window)
 llm_dtype: bfloat16          # vLLM --dtype (auto, bfloat16, float16)
 llm_send_images: false       # if false, skip mineru figures (text-only prompt)
 

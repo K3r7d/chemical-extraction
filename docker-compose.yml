@@ -66,7 +66,7 @@ services:
       LLM_MODEL_NAME: *llm-model
       TENSOR_PARALLEL_SIZE: auto
       LLM_DTYPE: bfloat16
-      LLM_MAX_MODEL_LEN: "81920"
+      LLM_MAX_MODEL_LEN: "131072"
     ports:
       - "28000:8000"
     volumes:

@@ -106,7 +106,7 @@ else
         --tensor-parallel-size "$GPU_COUNT" \
         --gpu-memory-utilization "$VLLM_GPU_MEM_UTIL" \
         --dtype bfloat16 \
-        --max-model-len 81920 \
+        --max-model-len 131072 \
         --host 127.0.0.1 --port 28000 \
         > logs/llm.log 2>&1 &
     echo $! > /tmp/a2i2-llm.pid
